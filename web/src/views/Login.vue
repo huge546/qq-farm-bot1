@@ -294,7 +294,7 @@ onMounted(fetchGameVersion)
 
         <NTabPane name="register" tab="注册">
           <div class="register-hint">
-            <span class="i-carbon-information-circle" />
+            <span class="i-carbon-information" />
             注册需要卡密，请联系管理员获取
           </div>
           <form class="form-area" @submit.prevent="handleRegister">
@@ -351,7 +351,7 @@ onMounted(fetchGameVersion)
 
             <div class="form-group">
               <label class="form-label" for="reg-card">
-                <span class="i-carbon-id-badge" />
+                <span class="i-carbon-badge" />
                 卡密
               </label>
               <BaseInput
@@ -375,7 +375,7 @@ onMounted(fetchGameVersion)
 
             <BaseButton type="submit" variant="primary" block :loading="regLoading" class="submit-btn">
               <span v-if="!regLoading" class="inline-flex items-center gap-2">
-                <span class="i-carbon-user-add" />
+                <span class="i-carbon-user-follow" />
                 注册
               </span>
             </BaseButton>
