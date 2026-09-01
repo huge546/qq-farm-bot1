@@ -1,4 +1,4 @@
-﻿import type { Account, AccountsData } from '../../types/account';
+import type { Account, AccountsData } from '../../types/account';
 export {};
 
 const fs = require('node:fs');
@@ -73,7 +73,7 @@ function addOrUpdateAccount(acc: Partial<Account> & { avatarUrl?: string }): Acc
         touchedAccountId = String(id);
         data.accounts.push({
             id: touchedAccountId,
-            name: acc.name || `璐﹀彿${id}`,
+            name: acc.name || `账号${id}`,
             code: acc.code || '',
             platform: acc.platform || 'qq',
             uin: acc.uin ? String(acc.uin) : '',
@@ -119,3 +119,4 @@ module.exports = {
     deleteAccount,
     countAccountsByUser,
 };
+
