@@ -272,8 +272,15 @@ const connectionStatus = computed(() => {
   }
 })
 
+const roleLabel = computed(() => (userStore.isAdmin ? '超级管理员' : '普通用户'))
+
 const navItems = computed(() => {
+  const currentRole = userStore.role || 'admin'
   return menuRoutes
+    .filter((item) => {
+      if (!item.meta?.roles) return true
+      return item.meta.roles.includes(currentRole as 'admin' | 'user')
+    })
     .map(item => ({
       path: item.path ? `/${item.path}` : '/',
       label: item.label,
@@ -373,7 +380,7 @@ async function copyToken() {
               style="--focus-ring: var(--theme-primary)"
               aria-haspopup="menu"
               :aria-expanded="showUserDropdown"
-              :aria-label="isSidebarCollapsed ? `管理员：${userStore.username || '未登录'}` : undefined"
+              :aria-label="isSidebarCollapsed ? `${roleLabel}：${userStore.username || '未登录'}` : undefined"
               @click="toggleUserDropdown"
             >
               <div class="flex items-center gap-3 overflow-hidden">
@@ -397,7 +404,7 @@ async function copyToken() {
                     <span
                       class="admin-badge rounded-lg px-1.5 py-0.2 text-[10px] font-medium leading-tight"
                     >
-                      超级管理员
+                      {{ roleLabel }}
                     </span>
                   </div>
                 </div>
@@ -411,7 +418,7 @@ async function copyToken() {
           </template>
           <div class="sidebar-tooltip-content">
             <strong>{{ userStore.username || '未登录' }}</strong>
-            <span>超级管理员 · 点击查看账户菜单</span>
+            <span>{{ roleLabel }} · 点击查看账户菜单</span>
           </div>
         </NTooltip>
 
@@ -425,10 +432,19 @@ async function copyToken() {
               {{ userStore.username }}
             </div>
             <div class="text-xs text-gray-500 dark:text-gray-400">
-              超级管理员
+              {{ roleLabel }}
             </div>
           </div>
           <div class="py-1">
+            <router-link
+              v-if="userStore.isUser"
+              class="sidebar-menu-button flex items-center gap-2 rounded-xl px-3 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-100/50 dark:text-gray-300 dark:hover:bg-gray-700/50"
+              :to="{ name: 'my-account' }"
+              @click="closeFlyouts"
+            >
+              <div class="i-carbon-user-avatar" />
+              <span>我的账号</span>
+            </router-link>
             <NButton
               class="sidebar-menu-button"
 

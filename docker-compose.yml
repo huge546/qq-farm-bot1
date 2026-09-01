@@ -1,4 +1,4 @@
-services:
+﻿services:
   qq-farm-bot:
     build:
       context: .
@@ -11,7 +11,7 @@ services:
     container_name: qq-farm-bot
     restart: unless-stopped
     ports:
-      - "${PORT:-3007}:3007"
+      - "127.0.0.1:${PORT:-3007}:3007"
     volumes:
       - qq-farm-data:/app/core/data
       - qq-farm-logs:/app/core/data/logs
@@ -20,7 +20,7 @@ services:
       - NODE_ENV=production
       - ADMIN_PORT=3007
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3007/api/game-version"]
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3007/api/game-version"]
       interval: 30s
       timeout: 10s
       retries: 3

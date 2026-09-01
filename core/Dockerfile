@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.7
+﻿# syntax=docker/dockerfile:1.7
 
 ARG NODE_IMAGE=node:20.19.6-alpine3.21
 ARG PNPM_VERSION=10.30.2
@@ -85,6 +85,6 @@ VOLUME ["/app/core/data"]
 EXPOSE 3007
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD wget -q --spider http://localhost:3007/api/game-version || exit 1
+    CMD wget -q --spider http://127.0.0.1:3007/api/game-version || exit 1
 
 CMD ["node", "client.js"]

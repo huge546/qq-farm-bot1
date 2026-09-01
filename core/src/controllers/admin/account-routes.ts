@@ -1,4 +1,4 @@
-import type { Application, Request, Response } from 'express';
+﻿import type { Application, Request, Response } from 'express';
 import type { AdminContext } from './context';
 export {};
 
@@ -7,9 +7,10 @@ export {};
  */
 
 const store = require('../../models/store');
-const { addOrUpdateAccount, deleteAccount } = store;
+const { addOrUpdateAccount, deleteAccount, countAccountsByUser } = store;
 const { findAccountByRef } = require('../../services/account-resolver');
 const { updateRuntimeConfig, getRuntimeConfig, getDefaultSystemConfig, getDevicePresets, getTimeZoneOptions } = require('../../config/config');
+const userStore = require('../../models/user-store');
 
 const {
     getAccId,
@@ -17,21 +18,31 @@ const {
     handleApiError,
     getAccountList,
     resolveAccId,
+    getAuthSession,
+    isUserOwnerOfAccount,
+    createAdminRequired,
 } = require('./middleware');
 
 function mountAccountRoutes(app: Application, ctx: AdminContext): void {
+    const adminRequired = createAdminRequired(ctx);
 
-    // API: 账号管理
+    // API: 璐﹀彿绠＄悊
     app.get('/api/accounts', (req: Request, res: Response) => {
         try {
+            const session = getAuthSession(req);
+            const isAdmin = session?.role === 'admin';
             const data = ctx.provider.getAccounts();
-            res.json({ ok: true, data });
+            const filtered = {
+                ...data,
+                accounts: isAdmin ? data.accounts : data.accounts.filter((a: any) => String(a.userId || '') === String(session?.userId || '')),
+            };
+            res.json({ ok: true, data: filtered });
         } catch (e: any) {
             res.status(500).json({ ok: false, error: e.message });
         }
     });
 
-    // API: 更新账号备注（兼容旧接口）
+    // API: 鏇存柊璐﹀彿澶囨敞锛堝吋瀹规棫鎺ュ彛锛?
     app.post('/api/account/remark', (req: Request, res: Response) => {
         try {
             const body = (req.body && typeof req.body === 'object') ? req.body : {};
@@ -40,6 +51,12 @@ function mountAccountRoutes(app: Application, ctx: AdminContext): void {
             const target = findAccountByRef(accountList, rawRef);
             if (!target || !target.id) {
                 return res.status(404).json({ ok: false, error: 'Account not found' });
+            }
+
+            // 鏅€氱敤鎴峰彧鑳芥搷浣滆嚜宸辩殑璐﹀彿
+            const session = getAuthSession(req);
+            if (session && session.role === 'user' && !isUserOwnerOfAccount(session, target)) {
+                return res.status(403).json({ ok: false, error: '鏃犳潈鎿嶄綔璇ヨ处鍙? });
             }
 
             const remark = String(body.remark !== undefined ? body.remark : body.name || '').trim();
@@ -53,7 +70,7 @@ function mountAccountRoutes(app: Application, ctx: AdminContext): void {
                 ctx.provider.setRuntimeAccountName(accountId, remark);
             }
             if (ctx.provider && ctx.provider.addAccountLog) {
-                ctx.provider.addAccountLog('update', `更新账号备注: ${remark}`, accountId, remark);
+                ctx.provider.addAccountLog('update', `鏇存柊璐﹀彿澶囨敞: ${remark}`, accountId, remark);
             }
             res.json({ ok: true, data });
         } catch (e: any) {
@@ -67,7 +84,7 @@ function mountAccountRoutes(app: Application, ctx: AdminContext): void {
             const requestedName = typeof rawBody.name === 'string' ? rawBody.name.trim() : '';
             const body = typeof rawBody.name === 'string' ? { ...rawBody, name: requestedName } : rawBody;
             if (!requestedName) {
-                return res.status(400).json({ ok: false, error: '账号备注不能为空' });
+                return res.status(400).json({ ok: false, error: '璐﹀彿澶囨敞涓嶈兘涓虹┖' });
             }
             const visibleAccounts = getAccountList(ctx);
             const remarkMatchedAccount = !body.id && requestedName
@@ -77,20 +94,37 @@ function mountAccountRoutes(app: Application, ctx: AdminContext): void {
             const updateRef = body.id || (remarkMatchedAccount && remarkMatchedAccount.id) || '';
             const isUpdate = !!updateRef;
 
+            const session = getAuthSession(req);
+            const isAdmin = session?.role === 'admin';
+
+            // 鏅€氱敤鎴锋坊鍔犺处鍙凤細缁戝畾 userId 骞舵牎楠岄厤棰?
+            let boundUserId = undefined;
+            if (!isUpdate && !isAdmin && session?.userId) {
+                const used = countAccountsByUser(session.userId);
+                const quota = userStore.getQuota(session.userId, used);
+                if (quota && quota.remaining <= 0) {
+                    return res.status(400).json({ ok: false, error: `璐﹀彿鏁伴噺宸茶揪涓婇檺锛?{quota.maxAccounts}锛夛紝璇峰厬鎹㈠崱瀵嗗悗閲嶈瘯` });
+                }
+                boundUserId = session.userId;
+            }
+
             const resolvedUpdateId = isUpdate ? resolveAccId(ctx, updateRef) : '';
-            const payload = isUpdate ? { ...body, id: resolvedUpdateId || String(updateRef) } : body;
+            const payload = {
+                ...(isUpdate ? { ...body, id: resolvedUpdateId || String(updateRef) } : body),
+                ...(boundUserId ? { userId: boundUserId } : {}),
+            };
             let wasRunning = false;
             if (isUpdate && ctx.provider.isAccountRunning) {
                 wasRunning = ctx.provider.isAccountRunning(payload.id);
             }
 
-            // 检查是否仅修改了备注信息
+            // 妫€鏌ユ槸鍚︿粎淇敼浜嗗娉ㄤ俊鎭?
             let onlyRemarkChanged = false;
             if (isUpdate) {
                 const oldAccounts = ctx.provider.getAccounts();
                 const oldAccount = oldAccounts.accounts.find((a: any) => a.id === payload.id);
                 if (oldAccount) {
-                    // 检查 payload 中是否只包含 id 和 name 字段
+                    // 妫€鏌?payload 涓槸鍚﹀彧鍖呭惈 id 鍜?name 瀛楁
                     const payloadKeys = Object.keys(payload);
                     const onlyIdAndName = payloadKeys.length === 2 && payloadKeys.includes('id') && payloadKeys.includes('name');
                     if (onlyIdAndName) {
@@ -106,13 +140,13 @@ function mountAccountRoutes(app: Application, ctx: AdminContext): void {
                 ctx.provider.addAccountLog(
                     isUpdate ? 'update' : 'add',
                     isRemarkRelogin
-                        ? `通过备注重新登录账号: ${accountName || accountId}`
-                        : isUpdate ? `更新账号: ${accountName || accountId}` : `添加账号: ${accountName || accountId}`,
+                        ? `閫氳繃澶囨敞閲嶆柊鐧诲綍璐﹀彿: ${accountName || accountId}`
+                        : isUpdate ? `鏇存柊璐﹀彿: ${accountName || accountId}` : `娣诲姞璐﹀彿: ${accountName || accountId}`,
                     accountId,
                     accountName
                 );
             }
-            // 如果是新增，自动启动
+            // 濡傛灉鏄柊澧烇紝鑷姩鍚姩
             if (!isUpdate) {
                 const newAcc = data.accounts.at(-1);
                 if (newAcc) ctx.provider.startAccount(newAcc.id);
@@ -120,7 +154,7 @@ function mountAccountRoutes(app: Application, ctx: AdminContext): void {
                 // Adding with an existing remark is a relogin operation, including for stopped accounts.
                 ctx.provider.restartAccount(payload.id);
             } else if (wasRunning && !onlyRemarkChanged) {
-                // 如果是更新，且之前在运行，且不是仅修改备注，则重启
+                // 濡傛灉鏄洿鏂帮紝涓斾箣鍓嶅湪杩愯锛屼笖涓嶆槸浠呬慨鏀瑰娉紝鍒欓噸鍚?
                 ctx.provider.restartAccount(payload.id);
             }
             res.json({ ok: true, data });
@@ -135,10 +169,17 @@ function mountAccountRoutes(app: Application, ctx: AdminContext): void {
 
             const before = ctx.provider.getAccounts();
             const target = findAccountByRef(before.accounts || [], req.params.id);
+
+            // 鏅€氱敤鎴峰彧鑳藉垹闄よ嚜宸辩殑璐﹀彿
+            const session = getAuthSession(req);
+            if (session && session.role === 'user' && !isUserOwnerOfAccount(session, target)) {
+                return res.status(403).json({ ok: false, error: '鏃犳潈鎿嶄綔璇ヨ处鍙? });
+            }
+
             ctx.provider.stopAccount(resolvedId);
             const data = deleteAccount(resolvedId);
             if (ctx.provider.addAccountLog) {
-                ctx.provider.addAccountLog('delete', `删除账号: ${(target && target.name) || req.params.id}`, resolvedId, target ? target.name : '');
+                ctx.provider.addAccountLog('delete', `鍒犻櫎璐﹀彿: ${(target && target.name) || req.params.id}`, resolvedId, target ? target.name : '');
             }
             res.json({ ok: true, data });
         } catch (e: any) {
@@ -146,27 +187,29 @@ function mountAccountRoutes(app: Application, ctx: AdminContext): void {
         }
     });
 
-    // API: 账号日志
+    // API: 璐﹀彿鏃ュ織
     app.get('/api/account-logs', (req: Request, res: Response) => {
         try {
             const limit = Number.parseInt(req.query.limit as string) || 100;
             let list: any[] = ctx.provider.getAccountLogs ? ctx.provider.getAccountLogs(limit) : [];
             if (!Array.isArray(list)) list = [];
 
-            // 与当前 web 前端保持一致：直接返回数组
+            // 涓庡綋鍓?web 鍓嶇淇濇寔涓€鑷达細鐩存帴杩斿洖鏁扮粍
             res.json(list);
         } catch (e: any) {
             res.status(500).json({ ok: false, error: e.message });
         }
     });
 
-    // API: 日志
+    // API: 鏃ュ織
     app.get('/api/logs', (req: Request, res: Response) => {
+        const session = getAuthSession(req);
+        const isAdmin = session?.role === 'admin';
         const queryAccountIdRaw = (req.query.accountId || '').toString().trim();
         const id = queryAccountIdRaw ? (queryAccountIdRaw === 'all' ? '' : resolveAccId(ctx, queryAccountIdRaw)) : getAccId(ctx, req);
-        // 如果没有指定账号ID，获取所有账号的日志
+        // 濡傛灉娌℃湁鎸囧畾璐﹀彿ID锛岃幏鍙栨墍鏈夎处鍙风殑鏃ュ織
         if (!id) {
-            const accountIds = getAccountIds(ctx);
+            const accountIds = getAccountIds(ctx, isAdmin ? undefined : session?.userId);
             const allLogs: any[] = [];
             const options = {
                 limit: Number.parseInt(req.query.limit as string) || 100,
@@ -186,14 +229,14 @@ function mountAccountRoutes(app: Application, ctx: AdminContext): void {
                 }
             }
 
-            // 按时间排序并限制数量
+            // 鎸夋椂闂存帓搴忓苟闄愬埗鏁伴噺
             allLogs.sort((a: any, b: any) => (b.time || 0) - (a.time || 0));
             const limitedLogs = allLogs.slice(0, options.limit);
 
             return res.json({ ok: true, data: limitedLogs });
         }
 
-        // 指定了账号ID且通过权限检查，返回该账号的日志
+        // 鎸囧畾浜嗚处鍙稩D涓旈€氳繃鏉冮檺妫€鏌ワ紝杩斿洖璇ヨ处鍙风殑鏃ュ織
         const options = {
             limit: Number.parseInt(req.query.limit as string) || 100,
             tag: req.query.tag || '',
@@ -208,7 +251,7 @@ function mountAccountRoutes(app: Application, ctx: AdminContext): void {
         res.json({ ok: true, data: list });
     });
 
-    // API: 清空当前账号运行日志
+    // API: 娓呯┖褰撳墠璐﹀彿杩愯鏃ュ織
     app.delete('/api/logs', (req: Request, res: Response) => {
         const id = getAccId(ctx, req);
         if (!id) return res.status(400).json({ ok: false, error: 'Missing x-account-id' });
@@ -236,7 +279,7 @@ function mountAccountRoutes(app: Application, ctx: AdminContext): void {
         }
     });
 
-    // API: 设置页统一保存（单次写入；运行中账号等待 worker revision ACK）
+    // API: 璁剧疆椤电粺涓€淇濆瓨锛堝崟娆″啓鍏ワ紱杩愯涓处鍙风瓑寰?worker revision ACK锛?
     app.post('/api/settings/save', async (req: Request, res: Response) => {
         const id = getAccId(ctx, req);
         if (!id) {
@@ -254,7 +297,7 @@ function mountAccountRoutes(app: Application, ctx: AdminContext): void {
                 unconfirmed: !!unconfirmed,
                 status: data?.status,
                 code: unconfirmed ? data.confirmationError?.code : undefined,
-                error: unconfirmed ? (data.confirmationError?.message || '配置已保存，但 worker 尚未确认应用') : undefined,
+                error: unconfirmed ? (data.confirmationError?.message || '閰嶇疆宸蹭繚瀛橈紝浣?worker 灏氭湭纭搴旂敤') : undefined,
                 data: data || {},
             });
         } catch (e: any) {
@@ -262,7 +305,7 @@ function mountAccountRoutes(app: Application, ctx: AdminContext): void {
         }
     });
 
-    // API: 设置面板主题
+    // API: 璁剧疆闈㈡澘涓婚
     app.post('/api/settings/theme', async (req: Request, res: Response) => {
         try {
             const theme = String((req.body || {}).theme || '');
@@ -273,7 +316,7 @@ function mountAccountRoutes(app: Application, ctx: AdminContext): void {
         }
     });
 
-    // API: 保存下线提醒配置
+    // API: 淇濆瓨涓嬬嚎鎻愰啋閰嶇疆
     app.post('/api/settings/offline-reminder', async (req: Request, res: Response) => {
         try {
             const body = (req.body && typeof req.body === 'object') ? req.body : {};
@@ -283,7 +326,7 @@ function mountAccountRoutes(app: Application, ctx: AdminContext): void {
                     const { buildDingTalkWebhook } = require('../../services/push');
                     buildDingTalkWebhook(body.endpoint, body.token, body.secret);
                 } catch (error: any) {
-                    return res.status(400).json({ ok: false, error: error?.message || '钉钉 Webhook 地址格式无效' });
+                    return res.status(400).json({ ok: false, error: error?.message || '閽夐拤 Webhook 鍦板潃鏍煎紡鏃犳晥' });
                 }
             }
             const data = store.setOfflineReminder ? store.setOfflineReminder(body) : {};
@@ -293,7 +336,7 @@ function mountAccountRoutes(app: Application, ctx: AdminContext): void {
         }
     });
 
-    // API: 测试下线提醒推送（不落盘）
+    // API: 娴嬭瘯涓嬬嚎鎻愰啋鎺ㄩ€侊紙涓嶈惤鐩橈級
     app.post('/api/settings/offline-reminder/test', async (req: Request, res: Response) => {
         try {
             const saved = store.getOfflineReminder ? store.getOfflineReminder() : {};
@@ -304,20 +347,20 @@ function mountAccountRoutes(app: Application, ctx: AdminContext): void {
             const endpoint = String(cfg.endpoint || '').trim();
             const token = String(cfg.token || '').trim();
             const secret = String(cfg.secret || '').trim();
-            const titleBase = String(cfg.title || '账号下线提醒').trim();
-            const msgBase = String(cfg.msg || '账号下线').trim();
+            const titleBase = String(cfg.title || '璐﹀彿涓嬬嚎鎻愰啋').trim();
+            const msgBase = String(cfg.msg || '璐﹀彿涓嬬嚎').trim();
 
             if (!channel) {
-                return res.status(400).json({ ok: false, error: '推送渠道不能为空' });
+                return res.status(400).json({ ok: false, error: '鎺ㄩ€佹笭閬撲笉鑳戒负绌? });
             }
             if (channel === 'webhook' && !endpoint) {
-                return res.status(400).json({ ok: false, error: 'Webhook 渠道需要填写接口地址' });
+                return res.status(400).json({ ok: false, error: 'Webhook 娓犻亾闇€瑕佸～鍐欐帴鍙ｅ湴鍧€' });
             }
             if (channel === 'dingtalk' && !endpoint && !token) {
-                return res.status(400).json({ ok: false, error: '钉钉渠道需要填写 Webhook 地址' });
+                return res.status(400).json({ ok: false, error: '閽夐拤娓犻亾闇€瑕佸～鍐?Webhook 鍦板潃' });
             }
             if (channel !== 'webhook' && channel !== 'dingtalk' && !token) {
-                return res.status(400).json({ ok: false, error: '当前推送渠道需要填写 Token' });
+                return res.status(400).json({ ok: false, error: '褰撳墠鎺ㄩ€佹笭閬撻渶瑕佸～鍐?Token' });
             }
 
             const now = new Date();
@@ -328,34 +371,34 @@ function mountAccountRoutes(app: Application, ctx: AdminContext): void {
                 endpoint,
                 token,
                 secret,
-                title: `${titleBase}（测试）`,
-                content: `${msgBase}\n\n这是一条下线提醒测试消息。\n时间: ${ts}`,
+                title: `${titleBase}锛堟祴璇曪級`,
+                content: `${msgBase}\n\n杩欐槸涓€鏉′笅绾挎彁閱掓祴璇曟秷鎭€俓n鏃堕棿: ${ts}`,
             });
 
             if (!ret) {
-                return res.status(400).json({ ok: false, error: '推送失败：无返回结果' });
+                return res.status(400).json({ ok: false, error: '鎺ㄩ€佸け璐ワ細鏃犺繑鍥炵粨鏋? });
             }
 
             const isSuccess = ret.ok ||
                 ret.code === 'ok' ||
                 ret.code === '0' ||
-                String(ret.msg || '').includes('成功') ||
+                String(ret.msg || '').includes('鎴愬姛') ||
                 String(ret.raw?.status || '').toLowerCase() === 'success';
 
-            if (!isSuccess && ret.msg && !String(ret.msg).includes('成功')) {
-                return res.status(400).json({ ok: false, error: ret.msg || '推送失败', data: ret });
+            if (!isSuccess && ret.msg && !String(ret.msg).includes('鎴愬姛')) {
+                return res.status(400).json({ ok: false, error: ret.msg || '鎺ㄩ€佸け璐?, data: ret });
             }
-            return res.json({ ok: true, data: ret, message: ret.msg || '推送成功' });
+            return res.json({ ok: true, data: ret, message: ret.msg || '鎺ㄩ€佹垚鍔? });
         } catch (e: any) {
             return res.status(500).json({ ok: false, error: e.message });
         }
     });
 
-    // API: 获取配置
+    // API: 鑾峰彇閰嶇疆
     app.get('/api/settings', async (req: Request, res: Response) => {
         try {
             const id = getAccId(ctx, req);
-            // 直接从主进程的 store 读取，确保即使账号未运行也能获取配置
+            // 鐩存帴浠庝富杩涚▼鐨?store 璇诲彇锛岀‘淇濆嵆浣胯处鍙锋湭杩愯涔熻兘鑾峰彇閰嶇疆
             const intervals = id ? store.getIntervals(id) : {};
             const strategy = id ? store.getPlantingStrategy(id) : null;
             const preferredSeed = id ? store.getPreferredSeed(id) : null;
@@ -380,19 +423,19 @@ function mountAccountRoutes(app: Application, ctx: AdminContext): void {
             const ui = store.getUI();
             const offlineReminder = store.getOfflineReminder
                 ? store.getOfflineReminder()
-                : { channel: 'webhook', endpoint: '', token: '', secret: '', title: '账号下线提醒', msg: '账号下线', offlineDeleteSec: 0 };
+                : { channel: 'webhook', endpoint: '', token: '', secret: '', title: '璐﹀彿涓嬬嚎鎻愰啋', msg: '璐﹀彿涓嬬嚎', offlineDeleteSec: 0 };
             res.json({ ok: true, data: { intervals, strategy, preferredSeed, friendQuietHours, automation, stealDelaySeconds, plantOrderRandom, plantDelaySeconds, fertilizerBuyOrganicCount, fertilizerBuyOrganicThresholdHours, fertilizerBuyNormalCount, fertilizerBuyNormalThresholdHours, fertilizerBuyCheckIntervalMinutes, bagSeedPriority, bagSeedLandTypes, bagSeedFallbackStrategy, autoAcceptFriendMinLevel, autoAcceptRequireOwnLevel, autoAcceptHarvestStealEnabled, autoAcceptHarvestStealHarvest, autoAcceptHarvestStealSteal, ui, offlineReminder } });
         } catch (e: any) {
             res.status(500).json({ ok: false, error: e.message });
         }
     });
 
-    // API: 获取默认配置
+    // API: 鑾峰彇榛樿閰嶇疆
     app.get('/api/settings/default', (_req: Request, res: Response) => {
         try {
             const defaultConfig = store.getDefaultAccountConfig ? store.getDefaultAccountConfig() : null;
             if (!defaultConfig) {
-                return res.status(500).json({ ok: false, error: '无法获取默认配置' });
+                return res.status(500).json({ ok: false, error: '鏃犳硶鑾峰彇榛樿閰嶇疆' });
             }
             res.json({ ok: true, data: defaultConfig });
         } catch (e: any) {
@@ -408,7 +451,7 @@ function mountAccountRoutes(app: Application, ctx: AdminContext): void {
         }
     });
 
-    app.get('/api/settings/system-config', (_req: Request, res: Response) => {
+    app.get('/api/settings/system-config', adminRequired, (_req: Request, res: Response) => {
         try {
             res.json({
                 ok: true,
@@ -424,7 +467,7 @@ function mountAccountRoutes(app: Application, ctx: AdminContext): void {
         }
     });
 
-    app.post('/api/settings/system-config', (req: Request, res: Response) => {
+    app.post('/api/settings/system-config', adminRequired, (req: Request, res: Response) => {
         try {
             const { serverUrl, clientVersion, platform, os, timeZone, deviceInfo } = req.body || {};
             const previous = getRuntimeConfig();
@@ -453,7 +496,7 @@ function mountAccountRoutes(app: Application, ctx: AdminContext): void {
         }
     });
 
-    app.post('/api/settings/system-config/reset', (_req: Request, res: Response) => {
+    app.post('/api/settings/system-config/reset', adminRequired, (_req: Request, res: Response) => {
         try {
             const previous = getRuntimeConfig();
             const saved = getDefaultSystemConfig();

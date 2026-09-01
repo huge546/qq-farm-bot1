@@ -1,1 +1,4 @@
 *.sh text eol=lf
+
+# Normalize all text files to LF in the repository
+* text=auto

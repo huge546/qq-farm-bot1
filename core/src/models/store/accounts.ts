@@ -1,4 +1,4 @@
-import type { Account, AccountsData } from '../../types/account';
+﻿import type { Account, AccountsData } from '../../types/account';
 export {};
 
 const fs = require('node:fs');
@@ -46,6 +46,7 @@ function normalizeAccount(raw: any): Account {
         createdAt: Number(source.createdAt) || Date.now(),
         updatedAt: Number(source.updatedAt) || Date.now(),
     };
+    if (source.userId) account.userId = String(source.userId);
     const nick = String(source.nick || '').trim();
     if (nick) account.nick = nick;
     return account;
@@ -57,7 +58,7 @@ function addOrUpdateAccount(acc: Partial<Account> & { avatarUrl?: string }): Acc
     let touchedAccountId = '';
     const source: any = acc || {};
     const cleanAccount: any = {};
-    for (const key of ['id', 'name', 'code', 'platform', 'uin', 'qq', 'avatar', 'avatarUrl', 'nick']) {
+    for (const key of ['id', 'name', 'code', 'platform', 'uin', 'qq', 'avatar', 'avatarUrl', 'nick', 'userId']) {
         if (source[key] !== undefined) cleanAccount[key] = source[key];
     }
     acc = cleanAccount;
@@ -72,12 +73,13 @@ function addOrUpdateAccount(acc: Partial<Account> & { avatarUrl?: string }): Acc
         touchedAccountId = String(id);
         data.accounts.push({
             id: touchedAccountId,
-            name: acc.name || `账号${id}`,
+            name: acc.name || `璐﹀彿${id}`,
             code: acc.code || '',
             platform: acc.platform || 'qq',
             uin: acc.uin ? String(acc.uin) : '',
             qq: acc.qq ? String(acc.qq) : (acc.uin ? String(acc.uin) : ''),
             avatar: acc.avatar || acc.avatarUrl || '',
+            userId: acc.userId ? String(acc.userId) : '',
             createdAt: Date.now(),
             updatedAt: Date.now(),
         });
@@ -87,6 +89,13 @@ function addOrUpdateAccount(acc: Partial<Account> & { avatarUrl?: string }): Acc
         ensureAccountConfig(touchedAccountId);
     }
     return data;
+}
+
+function countAccountsByUser(userId: unknown): number {
+    const data = loadAccounts();
+    const uid = String(userId || '');
+    if (!uid) return data.accounts.length;
+    return data.accounts.filter(a => String(a.userId || '') === uid).length;
 }
 
 function deleteAccount(id: unknown): AccountsData {
@@ -108,4 +117,5 @@ module.exports = {
     normalizeAccountsData,
     addOrUpdateAccount,
     deleteAccount,
+    countAccountsByUser,
 };
