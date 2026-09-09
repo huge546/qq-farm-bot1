@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { NTabs, NTabPane } from 'naive-ui'
-import api from '@/api'
+import api, { getApiErrorMessage } from '@/api'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import { useUserStore } from '@/stores/user'
@@ -85,17 +85,17 @@ async function handleLogin() {
   catch (e: any) {
     const data = e.response?.data
     if (data?.errorType === 'rate_limit') {
-      loginError.value = data.error || '请求过于频繁'
+      loginError.value = getApiErrorMessage(data, '请求过于频繁')
       if (data.remainingMs)
         rateLimitRemaining.value = Math.ceil(data.remainingMs / 1000)
     }
     else if (data?.errorType === 'locked') {
-      loginError.value = data.error || '账户已被锁定'
+      loginError.value = getApiErrorMessage(data, '账户已被锁定')
       if (data.remainingMs)
         lockoutRemaining.value = Math.ceil(data.remainingMs / 1000 / 60)
     }
     else {
-      loginError.value = data?.error || e.message || '操作异常'
+      loginError.value = getApiErrorMessage(e, '操作异常')
     }
   }
   finally {
