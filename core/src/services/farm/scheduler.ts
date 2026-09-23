@@ -14,7 +14,12 @@ const { getAllLands, harvest, farming, unlockLand, upgradeLand } = require('./ap
 const {
     analyzeLands,
     getCleanableFarmSocialEventItemIds,
+    getNormalFertilizerTargetsFromLands,
     resolveRemovableHarvestedLands,
+    getLandTypeByLevel,
+    normalizeFertilizerLandTypes,
+    filterLandIdsByTypes,
+    ALL_FERTILIZER_LAND_TYPES,
 } = require('./land-analysis');
 const { autoPlantEmptyLands, runFertilizerByConfig } = require('./planting');
 const { checkAndBuyFertilizerBoth } = require('../mall');
@@ -52,8 +57,35 @@ async function checkFarm(): Promise<boolean> {
     }
 }
 
+async function runMultiSeasonFertilizer(growingLandIds: any[], propagateErrors: boolean = false): Promise<void> {
+    if (!isAutomationOn('fertilizer_multi_season')) return;
+    const multiSeasonTargets: number[] = [...new Set(
+        (Array.isArray(growingLandIds) ? growingLandIds : []).map((v: any) => toNum(v)).filter(Boolean),
+    )];
+    if (multiSeasonTargets.length === 0) return;
+
+    log('施肥', `检测到多季作物进入后续季，准备执行多季补肥，目标地块 ${multiSeasonTargets.length} 块`, {
+        module: 'farm',
+        event: '多季节施肥',
+        result: 'trigger',
+        count: multiSeasonTargets.length,
+        landIds: multiSeasonTargets,
+    });
+    try {
+        await runFertilizerByConfig(multiSeasonTargets, { reason: 'multi_season', propagateErrors });
+    } catch (e: any) {
+        logWarn('施肥', `多季补肥执行失败: ${e.message}`, {
+            module: 'farm',
+            event: '多季节施肥',
+            result: 'error',
+        });
+        if (propagateErrors) throw e;
+    }
+}
+
 /**
  * smart 有机肥可能让作物在本轮成熟。施肥后只重查并收获一次，避免形成请求循环。
+ * 跟随收获也会走多季补肥：这批作物进入下一季后，主循环里的补肥已经跑完了。
  */
 async function harvestMatureOwnLandsOnce(actions: string[], propagateErrors: boolean = false): Promise<number> {
     let latest: any;
@@ -73,7 +105,7 @@ async function harvestMatureOwnLandsOnce(actions: string[], propagateErrors: boo
     if (harvestable.length === 0) return 0;
 
     try {
-        await harvest(harvestable);
+        const harvestReply = await harvest(harvestable);
         actions.push(`施肥后收获${harvestable.length}`);
         recordOperation('harvest', harvestable.length);
         networkEvents.emit('farmHarvested', {
@@ -88,6 +120,8 @@ async function harvestMatureOwnLandsOnce(actions: string[], propagateErrors: boo
             count: harvestable.length,
             landIds: [...harvestable],
         });
+        const classified = await resolveRemovableHarvestedLands(harvestable, harvestReply);
+        await runMultiSeasonFertilizer(classified.growing, propagateErrors);
         return harvestable.length;
     } catch (e: any) {
         logWarn('收获', `施肥后立即收获失败: ${e.message}`, {
@@ -258,27 +292,8 @@ async function runFarmOperation(
             }
         }
     }
-    if (opType === 'all' && postHarvest && Array.isArray(postHarvest.growing) && postHarvest.growing.length > 0 && isAutomationOn('fertilizer_multi_season')) {
-        const multiSeasonTargets: number[] = [...new Set(postHarvest.growing.map((v: any) => toNum(v)).filter(Boolean))] as number[];
-        if (multiSeasonTargets.length > 0) {
-            log('施肥', `检测到多季作物进入后续季，准备执行多季补肥，目标地块 ${multiSeasonTargets.length} 块`, {
-                module: 'farm',
-                event: '多季节施肥',
-                result: 'trigger',
-                count: multiSeasonTargets.length,
-                landIds: multiSeasonTargets,
-            });
-            try {
-                await runFertilizerByConfig(multiSeasonTargets, { reason: 'multi_season', propagateErrors });
-            } catch (e: any) {
-                logWarn('施肥', `多季补肥执行失败: ${e.message}`, {
-                    module: 'farm',
-                    event: '多季节施肥',
-                    result: 'error',
-                });
-                if (propagateErrors) throw e;
-            }
-        }
+    if (opType === 'all' && postHarvest && Array.isArray(postHarvest.growing) && postHarvest.growing.length > 0) {
+        await runMultiSeasonFertilizer(postHarvest.growing, propagateErrors);
     }
 
     // 执行土地解锁/升级（手动 upgrade 总是执行；自动 all 受开关控制）
@@ -333,6 +348,49 @@ async function runFarmOperation(
 
     if (opType === 'all') {
         const fertilizerConfig = getAutomation().fertilizer || 'none';
+        const canApplyNormal = fertilizerConfig === 'normal'
+            || fertilizerConfig === 'both'
+            || fertilizerConfig === 'smart';
+        if (isAutomationOn('fertilizer_multi_season') && canApplyNormal) {
+            try {
+                const latest = await getAllLands();
+                const latestLands = Array.isArray(latest && latest.lands) ? latest.lands : [];
+                let targets = getNormalFertilizerTargetsFromLands(latestLands);
+                // 先按施肥土地范围过滤，避免范围外地块每轮都触发"检测到但目标为空"的无效调用。
+                // 过滤规则与 runFertilizerByConfig 内部一致：勾满全部类型视为不限制；确认不了土地类型时跳过本轮。
+                const selectedLandTypes = normalizeFertilizerLandTypes(getAutomation().fertilizer_land_types);
+                if (selectedLandTypes.length > 0 && selectedLandTypes.length < ALL_FERTILIZER_LAND_TYPES.length) {
+                    const landTypeById = new Map<number, string>();
+                    for (const land of latestLands) {
+                        if (!land) continue;
+                        const landId = toNum(land.id);
+                        if (!landId) continue;
+                        landTypeById.set(landId, getLandTypeByLevel(land.level));
+                    }
+                    targets = landTypeById.size > 0
+                        ? filterLandIdsByTypes(targets, landTypeById, selectedLandTypes)
+                        : [];
+                }
+                if (targets.length > 0) {
+                    log('施肥', `巡田补肥：检测到 ${targets.length} 块地仍可施普通化肥`, {
+                        module: 'farm',
+                        event: '多季节施肥',
+                        result: 'trigger',
+                        count: targets.length,
+                        landIds: targets,
+                    });
+                    const result = await runFertilizerByConfig(targets, { reason: 'multi_season', propagateErrors });
+                    if (result.normal > 0) actions.push(`补肥${result.normal}`);
+                }
+            } catch (e: any) {
+                logWarn('施肥', `巡田补肥失败: ${e.message}`, {
+                    module: 'farm',
+                    event: '多季节施肥',
+                    result: 'error',
+                });
+                if (propagateErrors) throw e;
+            }
+        }
         if (fertilizerConfig === 'smart') {
             try {
                 const result = await runFertilizerByConfig([], { skipNormal: true, propagateErrors });
