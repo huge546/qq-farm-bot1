@@ -70,6 +70,14 @@ export const menuRoutes: MenuItem[] = [
     meta: { roles: ['admin'] },
   },
   {
+    path: 'admin-users',
+    name: 'admin-users',
+    label: '用户管理',
+    icon: 'i-carbon-user-admin',
+    component: () => import('@/views/AdminUsers.vue'),
+    meta: { roles: ['admin'] },
+  },
+  {
     path: 'settings',
     name: 'Settings',
     label: '设置',

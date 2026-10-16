@@ -15,6 +15,7 @@ const { createModuleLogger } = require('../../services/logger');
 
 const { createAdminContext } = require('./context');
 const { mountAuthRoutes } = require('./auth-routes');
+const { mountUserRoutes } = require('./user-routes');
 const { mountAccountRoutes } = require('./account-routes');
 const { mountFarmRoutes } = require('./farm-routes');
 const { mountFriendRoutes } = require('./friend-routes');
@@ -74,6 +75,7 @@ function startAdminServer(dataProvider: any): void {
 
     // Mount route modules
     mountAuthRoutes(app, ctx);
+    mountUserRoutes(app, ctx);
     mountWxLoginRoutes(app, ctx);
     mountQqLoginRoutes(app, ctx);
     mountFarmRoutes(app, ctx);

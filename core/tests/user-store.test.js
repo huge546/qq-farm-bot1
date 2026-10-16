@@ -150,3 +150,51 @@ test('续费后不再判为到期', () => {
     assert.equal(userStore.isUserIdExpired('u_renew'), false);
     assert.equal(userStore.getQuota('u_renew', 0).durationActive, true);
 });
+
+test('管理员增加的账号额度会提升上限', () => {
+    setFixture([makeUser({ id: 'u_bonus', cards: [], durationEnd: Date.now() + DAY })], []);
+    assert.equal(userStore.getQuota('u_bonus', 0).maxAccounts, 1);
+
+    const added = userStore.addUserBonusAccounts('u_bonus', 3);
+    assert.equal(added.ok, true);
+    assert.equal(added.bonusAccounts, 3);
+    assert.equal(userStore.getQuota('u_bonus', 0).maxAccounts, 4);
+    assert.equal(userStore.getQuota('u_bonus', 4).remaining, 0);
+});
+
+test('账号额度不接受非正数', () => {
+    setFixture([makeUser({ id: 'u_bonus', cards: [], durationEnd: Date.now() + DAY })], []);
+    assert.equal(userStore.addUserBonusAccounts('u_bonus', 0).ok, false);
+    assert.equal(userStore.addUserBonusAccounts('u_bonus', -2).ok, false);
+});
+
+test('管理员删除用户后不再出现在列表里', () => {
+    setFixture([
+        makeUser({ id: 'u_keep', username: 'keep', cards: [], durationEnd: Date.now() + DAY }),
+        makeUser({ id: 'u_drop', username: 'drop', cards: [], durationEnd: Date.now() - DAY }),
+    ], []);
+
+    const before = userStore.listUsersForAdmin();
+    assert.equal(before.length, 2);
+    assert.equal(before.find(user => user.id === 'u_drop').expired, true);
+
+    assert.equal(userStore.deleteUser('u_drop').ok, true);
+    assert.deepEqual(userStore.listUsersForAdmin().map(user => user.id), ['u_keep']);
+});
+
+test('listUsersForAdmin 汇总基础额度、卡密额度与管理员额度', () => {
+    setFixture(
+        [makeUser({ id: 'u_mix', cards: ['EEEE-FFFF-GGGG-HHHH'], durationEnd: Date.now() + DAY })],
+        [makeCard({ code: 'EEEE-FFFF-GGGG-HHHH', type: 'account', maxAccounts: 2, days: 0, redeemedBy: 'u_mix', redeemedAt: Date.now() })],
+    );
+    userStore.addUserBonusAccounts('u_mix', 4);
+
+    const [row] = userStore.listUsersForAdmin(() => 3);
+    assert.equal(row.baseQuota, 1);
+    assert.equal(row.cardBonus, 2);
+    assert.equal(row.bonusAccounts, 4);
+    assert.equal(row.maxAccounts, 7);
+    assert.equal(row.usedAccounts, 3);
+    assert.equal(row.remaining, 4);
+    assert.equal(row.expired, false);
+});

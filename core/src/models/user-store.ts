@@ -22,6 +22,7 @@ interface UserRecord {
     updatedAt: number;
     cards: string[];
     durationEnd: number;
+    bonusAccounts: number;
 }
 
 interface UsersData {
@@ -39,6 +40,7 @@ function normalizeUser(raw: any): UserRecord | null {
         updatedAt: Number(raw.updatedAt) || Date.now(),
         cards: Array.isArray(raw.cards) ? raw.cards.map(String) : [],
         durationEnd: Number(raw.durationEnd) || 0,
+        bonusAccounts: Math.max(0, Number.parseInt(raw.bonusAccounts, 10) || 0),
     };
 }
 
@@ -77,11 +79,13 @@ function getUserPublic(user: UserRecord): any {
         role: user.role,
         createdAt: user.createdAt,
         durationEnd: user.durationEnd,
+        bonusAccounts: Math.max(0, Number(user.bonusAccounts) || 0),
     };
 }
 
-function computeCardBonus(userId: string): number {
-    return cardStore.listCards().reduce((sum, card) => {
+function computeCardBonus(userId: string, cards?: any[]): number {
+    const list = Array.isArray(cards) ? cards : cardStore.listCards();
+    return list.reduce((sum: number, card: any) => {
         if (card.redeemedBy !== userId) return sum;
         if (card.type === 'account' && card.status === 'active') return sum + card.maxAccounts;
         return sum;
@@ -89,7 +93,7 @@ function computeCardBonus(userId: string): number {
 }
 
 function computeMaxAccounts(user: UserRecord, usedAccounts: number): number {
-    return BASE_QUOTA_ACCOUNTS + computeCardBonus(user.id);
+    return BASE_QUOTA_ACCOUNTS + computeCardBonus(user.id) + Math.max(0, Number(user.bonusAccounts) || 0);
 }
 
 function normalizeCardCode(raw: unknown): string {
@@ -97,10 +101,10 @@ function normalizeCardCode(raw: unknown): string {
 }
 
 // 已发放的时长卡卡号集合，用于识别“到期后被旧版本清零 durationEnd”的用户
-function collectDurationCardCodes(): Set<string> {
+function collectDurationCardCodes(cards?: any[]): Set<string> {
     const codes = new Set<string>();
     try {
-        for (const card of cardStore.listCards()) {
+        for (const card of (Array.isArray(cards) ? cards : cardStore.listCards())) {
             if (card.type === 'duration') codes.add(normalizeCardCode(card.code));
         }
     } catch {
@@ -136,7 +140,8 @@ function getQuota(userId: unknown, usedAccounts: number): any {
     const user = findUserById(userId);
     if (!user) return null;
     const cardBonus = computeCardBonus(user.id);
-    const maxAccounts = BASE_QUOTA_ACCOUNTS + cardBonus;
+    const bonusAccounts = Math.max(0, Number(user.bonusAccounts) || 0);
+    const maxAccounts = BASE_QUOTA_ACCOUNTS + cardBonus + bonusAccounts;
     const durationActive = user.durationEnd > Date.now();
     const durationRemainingMs = durationActive ? Math.max(0, user.durationEnd - Date.now()) : 0;
     return {
@@ -146,6 +151,7 @@ function getQuota(userId: unknown, usedAccounts: number): any {
         remaining: Math.max(0, maxAccounts - Math.max(0, usedAccounts)),
         baseQuota: BASE_QUOTA_ACCOUNTS,
         cardBonus,
+        bonusAccounts,
         durationActive,
         durationEnd: user.durationEnd,
         durationRemainingMs,
@@ -186,6 +192,7 @@ function registerUser(usernameRaw: unknown, password: string, cardCodeRaw: unkno
         updatedAt: Date.now(),
         cards: [card.code],
         durationEnd: card.type === 'duration' ? Date.now() + Math.max(1, card.days || DURATION_CARD_DAYS) * 86400 * 1000 : 0,
+        bonusAccounts: 0,
     };
 
     const data = loadUsers();
@@ -286,6 +293,60 @@ function reconcileExpired(): string[] {
     return expiredIds;
 }
 
+function addUserBonusAccounts(userId: unknown, count: number): { ok: boolean; error?: string; bonusAccounts?: number } {
+    const user = findUserById(userId);
+    if (!user) return { ok: false, error: '用户不存在' };
+    const delta = Math.max(0, Math.floor(Number(count) || 0));
+    if (!delta) return { ok: false, error: '请输入大于 0 的额度数量' };
+    const data = loadUsers();
+    const target = data.users.find(u => u.id === user.id);
+    if (!target) return { ok: false, error: '用户不存在' };
+    target.bonusAccounts = Math.max(0, Number(target.bonusAccounts) || 0) + delta;
+    target.updatedAt = Date.now();
+    saveUsers(data);
+    return { ok: true, bonusAccounts: target.bonusAccounts };
+}
+
+function deleteUser(userId: unknown): { ok: boolean; error?: string; user?: any } {
+    const user = findUserById(userId);
+    if (!user) return { ok: false, error: '用户不存在' };
+    const data = loadUsers();
+    const next = data.users.filter(u => u.id !== user.id);
+    if (next.length === data.users.length) return { ok: false, error: '用户不存在' };
+    data.users = next;
+    saveUsers(data);
+    return { ok: true, user: getUserPublic(user) };
+}
+
+function listUsersForAdmin(getUsedAccounts?: (userId: string) => number): any[] {
+    const cards = cardStore.listCards();
+    const durationCardCodes = collectDurationCardCodes(cards);
+    const now = Date.now();
+    return loadUsers().users.map((user) => {
+        const usedAccounts = typeof getUsedAccounts === 'function'
+            ? Math.max(0, Number(getUsedAccounts(user.id)) || 0)
+            : 0;
+        const cardBonus = computeCardBonus(user.id, cards);
+        const bonusAccounts = Math.max(0, Number(user.bonusAccounts) || 0);
+        const maxAccounts = BASE_QUOTA_ACCOUNTS + cardBonus + bonusAccounts;
+        return {
+            id: user.id,
+            username: user.username,
+            createdAt: user.createdAt,
+            updatedAt: user.updatedAt,
+            durationEnd: user.durationEnd,
+            durationActive: user.durationEnd > now,
+            expired: isUserExpired(user, durationCardCodes),
+            usedAccounts,
+            maxAccounts,
+            baseQuota: BASE_QUOTA_ACCOUNTS,
+            cardBonus,
+            bonusAccounts,
+            remaining: Math.max(0, maxAccounts - usedAccounts),
+        };
+    });
+}
+
 module.exports = {
     BASE_QUOTA_ACCOUNTS,
     DURATION_CARD_DAYS,
@@ -303,6 +364,9 @@ module.exports = {
     redeemCardForUser,
     changeUserPassword,
     listUsers,
+    listUsersForAdmin,
     setUserDuration,
+    addUserBonusAccounts,
+    deleteUser,
     reconcileExpired,
 };
