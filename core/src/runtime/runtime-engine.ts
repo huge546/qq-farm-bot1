@@ -144,10 +144,23 @@ function createRuntimeEngine(options: RuntimeEngineOptions = {}) {
     }
 
     function startAllAccounts(): void {
+        const { getExpiredUserIds } = require('../models/user-store');
         const accounts = (store.getAccounts().accounts || []);
-        if (accounts.length > 0) {
-            log('系统', `发现 ${accounts.length} 个账号，正在启动...`);
-            accounts.forEach((acc: any) => startWorker(acc));
+        let expiredIds = new Set<string>();
+        try {
+            expiredIds = getExpiredUserIds();
+        } catch {
+            // 用户数据读取异常时不做过滤，避免误停账号
+        }
+        const runnable = accounts.filter((acc: any) => {
+            const userId = String((acc && acc.userId) || '');
+            if (!userId || !expiredIds.has(userId)) return true;
+            log('系统', `跳过时长卡到期用户的账号: ${acc.name}`, { accountId: String(acc.id), accountName: acc.name });
+            return false;
+        });
+        if (runnable.length > 0) {
+            log('系统', `发现 ${runnable.length} 个账号，正在启动...`);
+            runnable.forEach((acc: any) => startWorker(acc));
         } else {
             log('系统', '未发现账号，请访问管理面板添加账号');
         }
@@ -167,16 +180,23 @@ function createRuntimeEngine(options: RuntimeEngineOptions = {}) {
             startAdminServer(dataProvider);
         }
 
-        // 定时降级：扫描过期时长卡用户，恢复基础配额
-        const { reconcileExpired } = require('../models/user-store');
+        // 时长卡到期：停止该用户名下的账号
+        const { getExpiredUserIds } = require('../models/user-store');
         const reconcileTimer = setInterval(() => {
             try {
-                const expired = reconcileExpired();
-                if (expired.length > 0) {
-                    log('系统', `时长卡过期降级用户: ${expired.join(', ')}`);
+                const expiredIds = getExpiredUserIds();
+                if (!expiredIds.size) return;
+                const accounts = (store.getAccounts().accounts || []);
+                for (const acc of accounts) {
+                    const userId = String((acc && acc.userId) || '');
+                    const accountId = String((acc && acc.id) || '');
+                    if (!userId || !accountId || !expiredIds.has(userId) || !workers[accountId]) continue;
+                    stopWorker(accountId);
+                    addAccountLog('stop', `时长卡已到期，账号已停止: ${acc.name}`, accountId, acc.name, { reason: 'owner_expired' });
+                    log('系统', `时长卡到期，已停止账号: ${acc.name}`, { accountId, accountName: acc.name });
                 }
             } catch (e) {
-                log('系统', `用户配额降级扫描失败: ${e && e.message ? e.message : String(e)}`);
+                log('系统', `时长卡到期扫描失败: ${e && e.message ? e.message : String(e)}`);
             }
         }, 60 * 1000);
         reconcileTimer.unref?.();

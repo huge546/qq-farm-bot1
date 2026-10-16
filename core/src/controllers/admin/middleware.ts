@@ -4,7 +4,25 @@ export {};
 
 const crypto = require('node:crypto');
 const store = require('../../models/store');
+const userStore = require('../../models/user-store');
 const { normalizeAccountRef, resolveAccountId } = require('../../services/account-resolver');
+
+// 时长卡到期后仍允许访问的接口：查看状态、续费、改密、退出
+const EXPIRY_EXEMPT_PATHS = new Set([
+    '/api/user/me',
+    '/api/user/quota',
+    '/api/user/redeem-card',
+    '/api/user/change-password',
+    '/api/logout',
+    '/api/auth/validate',
+    '/api/ping',
+    '/api/game-version',
+]);
+
+function isExpiryExemptPath(req: Request): boolean {
+    const raw = String((req as any).originalUrl || req.url || '');
+    return EXPIRY_EXEMPT_PATHS.has(raw.split('?')[0]);
+}
 
 interface AuthenticatedRequest extends Request {
     adminToken?: string;
@@ -37,6 +55,12 @@ function createAuthRequired(ctx: AdminContext) {
         }
         req.adminToken = token;
         req.authSession = { role: session.role, userId: session.userId };
+        if (session.role === 'user' && session.userId
+            && !isExpiryExemptPath(req)
+            && userStore.isUserIdExpired(session.userId)) {
+            res.status(403).json({ ok: false, error: '时长卡已到期，请兑换新的时长卡后重试', errorType: 'expired' });
+            return;
+        }
         next();
     };
 }

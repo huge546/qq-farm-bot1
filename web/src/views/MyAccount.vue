@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { NCard, NProgress, NTag } from 'naive-ui'
+import { NAlert, NCard, NProgress, NTag } from 'naive-ui'
 import { storeToRefs } from 'pinia'
 import { computed, onMounted, ref } from 'vue'
 import api from '@/api'
@@ -81,10 +81,14 @@ onMounted(loadQuota)
       </div>
     </section>
 
+    <NAlert v-if="quota && quota.expired" type="error" :show-icon="true">
+      时长卡已到期，账号已停止运行。兑换新的时长卡后会自动恢复。
+    </NAlert>
+
     <NCard title="账号配额" size="small">
       <template #header-extra>
-        <NTag v-if="quota" type="info" size="small">
-          {{ dateFormat(quota.durationEnd) }}
+        <NTag v-if="quota" :type="quota.expired ? 'error' : 'info'" size="small">
+          {{ quota.expired ? '已到期' : dateFormat(quota.durationEnd) }}
         </NTag>
       </template>
 
@@ -127,7 +131,9 @@ onMounted(loadQuota)
 
         <div class="flex items-center justify-between rounded-lg bg-coolgray-2 px-3 py-2 text-sm">
           <span class="text-coolgray-9">会员有效期</span>
-          <span class="font-medium">{{ quota.durationActive ? dateFormat(quota.durationEnd) : '未开通' }}</span>
+          <span class="font-medium" :class="quota.expired ? 'text-red-500' : ''">
+            {{ quota.expired ? '已到期' : (quota.durationActive ? dateFormat(quota.durationEnd) : '未开通') }}
+          </span>
         </div>
       </div>
     </NCard>

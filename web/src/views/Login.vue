@@ -62,11 +62,14 @@ async function handleLogin() {
   try {
     const result = await userStore.login(username.value, password.value)
     if (result.ok) {
-      if (result.data?.mustChangePassword)
+      const expired = result.data?.quota?.expired === true
+      if (expired)
+        loginSuccess.value = '时长卡已到期，请兑换新的时长卡'
+      else if (result.data?.mustChangePassword)
         loginSuccess.value = '登录成功，请修改默认密码'
       setTimeout(() => {
-        window.location.href = '/'
-      }, 500)
+        window.location.href = expired ? '/my-account' : '/'
+      }, 800)
     }
     else if (result.errorType === 'rate_limit') {
       loginError.value = result.error || '请求过于频繁，请稍后重试'

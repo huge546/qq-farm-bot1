@@ -92,6 +92,46 @@ function computeMaxAccounts(user: UserRecord, usedAccounts: number): number {
     return BASE_QUOTA_ACCOUNTS + computeCardBonus(user.id);
 }
 
+function normalizeCardCode(raw: unknown): string {
+    return String(raw || '').trim().toUpperCase().replace(/[-\s]/g, '');
+}
+
+// 已发放的时长卡卡号集合，用于识别“到期后被旧版本清零 durationEnd”的用户
+function collectDurationCardCodes(): Set<string> {
+    const codes = new Set<string>();
+    try {
+        for (const card of cardStore.listCards()) {
+            if (card.type === 'duration') codes.add(normalizeCardCode(card.code));
+        }
+    } catch {
+        // 卡密读取异常时按“未开通”处理，避免误封用户
+    }
+    return codes;
+}
+
+function isUserExpired(user: any, durationCardCodes?: Set<string>): boolean {
+    if (!user) return false;
+    const end = Number(user.durationEnd) || 0;
+    if (end > 0) return end <= Date.now();
+    const codes = durationCardCodes || collectDurationCardCodes();
+    if (!codes.size) return false;
+    const owned = Array.isArray(user.cards) ? user.cards : [];
+    return owned.some((code: any) => codes.has(normalizeCardCode(code)));
+}
+
+function isUserIdExpired(userId: unknown): boolean {
+    return isUserExpired(findUserById(userId));
+}
+
+function getExpiredUserIds(): Set<string> {
+    const durationCardCodes = collectDurationCardCodes();
+    const ids = new Set<string>();
+    for (const user of loadUsers().users) {
+        if (isUserExpired(user, durationCardCodes)) ids.add(user.id);
+    }
+    return ids;
+}
+
 function getQuota(userId: unknown, usedAccounts: number): any {
     const user = findUserById(userId);
     if (!user) return null;
@@ -109,6 +149,7 @@ function getQuota(userId: unknown, usedAccounts: number): any {
         durationActive,
         durationEnd: user.durationEnd,
         durationRemainingMs,
+        expired: isUserExpired(user),
         exceeded: Math.max(0, Math.max(0, usedAccounts) - maxAccounts),
     };
 }
@@ -236,18 +277,12 @@ function setUserDuration(userId: unknown, days: number): { ok: boolean; error?: 
 }
 
 function reconcileExpired(): string[] {
-    const now = Date.now();
     const data = loadUsers();
     const expiredIds: string[] = [];
-    let changed = false;
+    const durationCardCodes = collectDurationCardCodes();
     for (const user of data.users) {
-        if (user.durationEnd > 0 && user.durationEnd <= now) {
-            expiredIds.push(user.id);
-            user.durationEnd = 0;
-            changed = true;
-        }
+        if (isUserExpired(user, durationCardCodes)) expiredIds.push(user.id);
     }
-    if (changed) saveUsers(data);
     return expiredIds;
 }
 
@@ -259,6 +294,9 @@ module.exports = {
     findUserByUsername,
     getUserPublic,
     computeMaxAccounts,
+    isUserExpired,
+    isUserIdExpired,
+    getExpiredUserIds,
     getQuota,
     registerUser,
     verifyLogin,

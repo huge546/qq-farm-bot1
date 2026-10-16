@@ -204,10 +204,27 @@ function mountAuthRoutes(app: Application, ctx: AdminContext): void {
         }
         const { cardCode } = req.body || {};
         if (!cardCode) return res.status(400).json({ ok: false, error: '缺少卡密' });
+        const wasExpired = userStore.isUserIdExpired(session.userId);
         const result = userStore.redeemCardForUser(session.userId, cardCode);
         if (!result.ok) return res.status(400).json({ ok: false, error: result.error });
+        const stillExpired = userStore.isUserIdExpired(session.userId);
+        // 续费成功后，把该用户到期时被停掉的账号重新拉起来
+        if (wasExpired && !stillExpired && ctx.provider && typeof ctx.provider.startAccount === 'function') {
+            for (const account of getAccountList(ctx, session.userId)) {
+                const accountId = String((account && account.id) || '');
+                if (!accountId) continue;
+                const running = typeof ctx.provider.isAccountRunning === 'function' ? ctx.provider.isAccountRunning(accountId) : false;
+                if (running) continue;
+                try {
+                    ctx.provider.startAccount(accountId);
+                    adminLogger.info('时长卡续费后自动启动账号', { userId: session.userId, accountId });
+                } catch (e: any) {
+                    adminLogger.warn('时长卡续费后启动账号失败', { userId: session.userId, accountId, error: e && e.message });
+                }
+            }
+        }
         const usedAccounts = userStore.getQuota(session.userId, getAccountList(ctx, session.userId).length);
-        return res.json({ ok: true, data: { user: userStore.getUserPublic(result.user!), quota: usedAccounts } });
+        return res.json({ ok: true, data: { user: userStore.getUserPublic(result.user!), quota: usedAccounts, resumed: wasExpired && !stillExpired } });
     });
 
     // API: 卡密列表统计（管理员）
