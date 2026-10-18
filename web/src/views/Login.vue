@@ -4,6 +4,7 @@ import { NTabs, NTabPane } from 'naive-ui'
 import api, { getApiErrorMessage } from '@/api'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
+import BrandMark from '@/components/ui/BrandMark.vue'
 import { useUserStore } from '@/stores/user'
 
 declare const __APP_VERSION__: string
@@ -223,9 +224,7 @@ onMounted(fetchGameVersion)
   <main class="login-container">
     <section class="login-card">
       <header class="logo-area">
-        <div class="logo-icon">
-          <img src="/icon.png" alt="">
-        </div>
+        <BrandMark class="logo-icon" :size="58" />
         <div>
           <span class="logo-kicker">QQ FARM</span>
           <h1 class="logo-title">
@@ -411,7 +410,7 @@ onMounted(fetchGameVersion)
   overflow: hidden;
   padding: 28px 18px;
   color: var(--ui-ink);
-  background-color: #edf2ea;
+  background-color: var(--ui-bg);
   background-image:
     linear-gradient(rgba(67, 141, 99, 0.045) 1px, transparent 1px),
     linear-gradient(90deg, rgba(67, 141, 99, 0.045) 1px, transparent 1px);
@@ -423,7 +422,7 @@ onMounted(fetchGameVersion)
   inset: 8% 7%;
   border: 1px solid rgba(67, 141, 99, 0.08);
   border-radius: 36px;
-  background: rgba(255, 255, 255, 0.22);
+  background: color-mix(in srgb, var(--ui-surface-strong) 22%, transparent);
   content: '';
 }
 
@@ -432,12 +431,12 @@ onMounted(fetchGameVersion)
   z-index: 1;
   width: min(480px, 100%);
   padding: 30px;
-  border: 1px solid rgba(58, 86, 68, 0.14);
+  border: 1px solid var(--ui-border);
   border-radius: 18px;
-  background: rgba(250, 251, 247, 0.82);
+  background: color-mix(in srgb, var(--ui-bg) 82%, transparent);
   box-shadow:
     0 28px 76px rgba(55, 75, 61, 0.16),
-    inset 0 1px 0 rgba(255, 255, 255, 0.94);
+    inset 0 1px 0 var(--glass-highlight);
   -webkit-backdrop-filter: blur(24px) saturate(135%);
   backdrop-filter: blur(24px) saturate(135%);
 }
@@ -451,21 +450,8 @@ onMounted(fetchGameVersion)
 }
 
 .logo-icon {
-  display: grid;
-  width: 58px;
-  height: 58px;
   flex: none;
-  place-items: center;
-  overflow: hidden;
-  border: 1px solid rgba(67, 141, 99, 0.16);
-  border-radius: 16px;
-  background: var(--ui-primary-soft);
-}
-
-.logo-icon img {
-  width: 42px;
-  height: 42px;
-  object-fit: contain;
+  filter: drop-shadow(0 8px 18px rgba(45, 122, 83, 0.24));
 }
 
 .logo-kicker {
@@ -519,7 +505,7 @@ onMounted(fetchGameVersion)
   border-color: var(--ui-border);
   border-radius: 10px;
   color: var(--ui-ink);
-  background: rgba(255, 255, 255, 0.7);
+  background: color-mix(in srgb, var(--ui-surface-strong) 70%, transparent);
 }
 
 .login-card :deep(.base-input:focus) {
@@ -546,13 +532,13 @@ onMounted(fetchGameVersion)
 
 .error-message {
   border-color: rgba(201, 95, 102, 0.18);
-  color: #984049;
+  color: var(--ui-danger);
   background: var(--ui-danger-soft);
 }
 
 .success-message {
   border-color: rgba(67, 141, 99, 0.18);
-  color: #2e714b;
+  color: var(--ui-primary);
   background: var(--ui-primary-soft);
 }
 
