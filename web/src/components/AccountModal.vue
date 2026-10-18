@@ -74,7 +74,7 @@ async function addAccount(data: any, isRelogin = false) {
   loading.value = true
   errorMessage.value = ''
   try {
-    const res = await api.post('/api/accounts', { ...data, name })
+    const res = await api.post('/api/accounts', { ...data, name }, { timeout: 30000 } as any)
     if (res.data.ok) {
       emit('saved')
       close()

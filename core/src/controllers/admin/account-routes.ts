@@ -79,6 +79,7 @@ function mountAccountRoutes(app: Application, ctx: AdminContext): void {
     });
 
     app.post('/api/accounts', (req: Request, res: Response) => {
+        const saveStartedAt = Date.now();
         try {
             const rawBody = (req.body && typeof req.body === 'object') ? req.body : {};
             const requestedName = typeof rawBody.name === 'string' ? rawBody.name.trim() : '';
@@ -134,6 +135,7 @@ function mountAccountRoutes(app: Application, ctx: AdminContext): void {
             }
 
             const data = addOrUpdateAccount(payload);
+            const persistCost = Date.now() - saveStartedAt;
             if (ctx.provider.addAccountLog) {
                 const accountId = isUpdate ? String(payload.id) : String((data.accounts.at(-1) || {}).id || '');
                 const accountName = payload.name || '';
@@ -146,18 +148,36 @@ function mountAccountRoutes(app: Application, ctx: AdminContext): void {
                     accountName
                 );
             }
-            // 如果是新增，自动启动
+            // 启动/重启 worker 放到响应之后执行，避免拖慢保存接口导致前端超时
+            let startAfterSave: (() => void) | null = null;
             if (!isUpdate) {
                 const newAcc = data.accounts.at(-1);
-                if (newAcc) ctx.provider.startAccount(newAcc.id);
+                if (newAcc && newAcc.id) {
+                    startAfterSave = () => ctx.provider.startAccount(newAcc.id);
+                }
             } else if (isRemarkRelogin) {
                 // Adding with an existing remark is a relogin operation, including for stopped accounts.
-                ctx.provider.restartAccount(payload.id);
+                startAfterSave = () => ctx.provider.restartAccount(payload.id);
             } else if (wasRunning && !onlyRemarkChanged) {
                 // 如果是更新，且之前在运行，且不是仅修改备注，则重启
-                ctx.provider.restartAccount(payload.id);
+                startAfterSave = () => ctx.provider.restartAccount(payload.id);
             }
+
             res.json({ ok: true, data });
+
+            if (persistCost > 1500) {
+                console.warn(`[账号] 保存落库耗时 ${persistCost}ms`, { accountName: payload.name || '' });
+            }
+
+            if (startAfterSave) {
+                setImmediate(() => {
+                    try {
+                        startAfterSave!();
+                    } catch (e: any) {
+                        console.error('[账号] 保存后启动失败:', e && e.message ? e.message : String(e));
+                    }
+                });
+            }
         } catch (e: any) {
             handleApiError(res, e);
         }
