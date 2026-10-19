@@ -108,13 +108,13 @@ async function createLoginTask(): Promise<QqLoginTask> {
     return normalizeTask(await requestNapCat('/api/qq/login/qrcode', {}));
 }
 
-async function queryLoginStatus(taskId: string): Promise<QqLoginTask> {
+async function queryLoginStatus(taskId: string, refresh = false): Promise<QqLoginTask> {
     const id = String(taskId || '').trim();
     if (!id)
         throw new Error('登录任务 ID 不能为空');
     return normalizeTask(await requestNapCat('/api/qq/login/status', {
         taskId: id,
-        refresh: false,
+        refresh: refresh === true,
     }));
 }
 

@@ -51,6 +51,7 @@ let qqPollController: AbortController | undefined
 let qqPollInFlight: Promise<void> | undefined
 let qqPollKey = ''
 let qqPendingCode = ''
+let qqRefreshAfterScan = false
 let qrNameSubmitTimer: ReturnType<typeof setTimeout> | undefined
 
 const wechatQrLoginEnabled = computed(() => loginSettingsLoaded.value && loginSettings.value.wechatQrLogin)
@@ -407,6 +408,7 @@ function resetQqLogin() {
   qqQrUrl.value = ''
   qqLoading.value = false
   qqPendingCode = ''
+  qqRefreshAfterScan = false
   clearQrNameSubmitTimer()
 }
 
@@ -467,7 +469,7 @@ async function pollQqLoginRequest(taskId: string, flowVersion: number) {
   const controller = new AbortController()
   qqPollController = controller
   try {
-    const response = await api.post(`/api/qq-login/tasks/${taskId}/status`, undefined, {
+    const response = await api.post(`/api/qq-login/tasks/${taskId}/status`, { refresh: qqRefreshAfterScan }, {
       timeout: 120000,
       signal: controller.signal,
       skipErrorToast: true,
@@ -489,6 +491,7 @@ async function pollQqLoginRequest(taskId: string, flowVersion: number) {
     }
     else if (status === 'scanned') {
       qqStatus.value = '已扫码，请在手机上确认'
+      qqRefreshAfterScan = true
     }
     else if (status === 'confirmed') {
       stopQqPolling()

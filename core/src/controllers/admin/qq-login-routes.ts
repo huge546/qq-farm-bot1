@@ -36,7 +36,8 @@ function mountQqLoginRoutes(app: Application, ctx: AdminContext): void {
 
     app.post('/api/qq-login/tasks/:taskId/status', async (req: Request, res: Response) => {
         try {
-            const task = await queryLoginStatus(String(req.params.taskId || ''));
+            const refresh = ((req.body || {}) as any).refresh === true;
+            const task = await queryLoginStatus(String(req.params.taskId || ''), refresh);
             res.json({ ok: true, data: publicTask(task) });
         }
         catch (error: any) {
