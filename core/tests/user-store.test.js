@@ -40,6 +40,7 @@ function setFixture(users, cards) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
     fs.writeFileSync(USERS_FILE, JSON.stringify({ users }, null, 2), 'utf8');
     fs.writeFileSync(CARDS_FILE, JSON.stringify({ cards }, null, 2), 'utf8');
+    userStore.invalidateUserCaches();
 }
 
 function makeUser(over = {}) {

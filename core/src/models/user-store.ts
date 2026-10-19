@@ -83,8 +83,31 @@ function getUserPublic(user: UserRecord): any {
     };
 }
 
+// 卡密与到期状态缓存：鉴权中间件每个请求都会用到，避免重复读盘解析 JSON
+const USER_CACHE_TTL_MS = 5000;
+let cardsCache: { at: number; cards: any[] } = { at: 0, cards: [] };
+let expiredCache: { at: number; ids: Set<string> } = { at: 0, ids: new Set() };
+
+function invalidateUserCaches(): void {
+    cardsCache = { at: 0, cards: [] };
+    expiredCache = { at: 0, ids: new Set() };
+}
+
+function listCardsCached(): any[] {
+    const now = Date.now();
+    if (cardsCache.at && now - cardsCache.at < USER_CACHE_TTL_MS) return cardsCache.cards;
+    let cards: any[] = [];
+    try {
+        cards = cardStore.listCards();
+    } catch {
+        cards = [];
+    }
+    cardsCache = { at: now, cards };
+    return cards;
+}
+
 function computeCardBonus(userId: string, cards?: any[]): number {
-    const list = Array.isArray(cards) ? cards : cardStore.listCards();
+    const list = Array.isArray(cards) ? cards : listCardsCached();
     return list.reduce((sum: number, card: any) => {
         if (card.redeemedBy !== userId) return sum;
         if (card.type === 'account' && card.status === 'active') return sum + card.maxAccounts;
@@ -104,7 +127,7 @@ function normalizeCardCode(raw: unknown): string {
 function collectDurationCardCodes(cards?: any[]): Set<string> {
     const codes = new Set<string>();
     try {
-        for (const card of (Array.isArray(cards) ? cards : cardStore.listCards())) {
+        for (const card of (Array.isArray(cards) ? cards : listCardsCached())) {
             if (card.type === 'duration') codes.add(normalizeCardCode(card.code));
         }
     } catch {
@@ -124,22 +147,30 @@ function isUserExpired(user: any, durationCardCodes?: Set<string>): boolean {
 }
 
 function isUserIdExpired(userId: unknown): boolean {
-    return isUserExpired(findUserById(userId));
+    const id = String(userId || '');
+    if (!id) return false;
+    return getExpiredUserIds().has(id);
 }
 
 function getExpiredUserIds(): Set<string> {
-    const durationCardCodes = collectDurationCardCodes();
+    const now = Date.now();
+    if (expiredCache.at && now - expiredCache.at < USER_CACHE_TTL_MS) {
+        return new Set(expiredCache.ids);
+    }
+    const durationCardCodes = collectDurationCardCodes(listCardsCached());
     const ids = new Set<string>();
     for (const user of loadUsers().users) {
         if (isUserExpired(user, durationCardCodes)) ids.add(user.id);
     }
+    expiredCache = { at: now, ids };
     return ids;
 }
 
 function getQuota(userId: unknown, usedAccounts: number): any {
     const user = findUserById(userId);
     if (!user) return null;
-    const cardBonus = computeCardBonus(user.id);
+    const cards = listCardsCached();
+    const cardBonus = computeCardBonus(user.id, cards);
     const bonusAccounts = Math.max(0, Number(user.bonusAccounts) || 0);
     const maxAccounts = BASE_QUOTA_ACCOUNTS + cardBonus + bonusAccounts;
     const durationActive = user.durationEnd > Date.now();
@@ -155,7 +186,7 @@ function getQuota(userId: unknown, usedAccounts: number): any {
         durationActive,
         durationEnd: user.durationEnd,
         durationRemainingMs,
-        expired: isUserExpired(user),
+        expired: isUserExpired(user, collectDurationCardCodes(cards)),
         exceeded: Math.max(0, Math.max(0, usedAccounts) - maxAccounts),
     };
 }
@@ -206,6 +237,7 @@ function registerUser(usernameRaw: unknown, password: string, cardCodeRaw: unkno
         saveUsers(data2);
         return { ok: false, error: redeem.error || '卡密兑换失败', code: 'redeem_failed' };
     }
+    invalidateUserCaches();
     return { ok: true, user };
 }
 
@@ -242,6 +274,7 @@ function redeemCardForUser(userId: unknown, cardCodeRaw: unknown): { ok: boolean
         target.updatedAt = Date.now();
         saveUsers(data);
     }
+    invalidateUserCaches();
     return { ok: true, user: target || user };
 }
 
@@ -280,6 +313,7 @@ function setUserDuration(userId: unknown, days: number): { ok: boolean; error?: 
         target.updatedAt = Date.now();
         saveUsers(data);
     }
+    invalidateUserCaches();
     return { ok: true };
 }
 
@@ -304,6 +338,7 @@ function addUserBonusAccounts(userId: unknown, count: number): { ok: boolean; er
     target.bonusAccounts = Math.max(0, Number(target.bonusAccounts) || 0) + delta;
     target.updatedAt = Date.now();
     saveUsers(data);
+    invalidateUserCaches();
     return { ok: true, bonusAccounts: target.bonusAccounts };
 }
 
@@ -315,6 +350,7 @@ function deleteUser(userId: unknown): { ok: boolean; error?: string; user?: any 
     if (next.length === data.users.length) return { ok: false, error: '用户不存在' };
     data.users = next;
     saveUsers(data);
+    invalidateUserCaches();
     return { ok: true, user: getUserPublic(user) };
 }
 
@@ -358,6 +394,7 @@ module.exports = {
     isUserExpired,
     isUserIdExpired,
     getExpiredUserIds,
+    invalidateUserCaches,
     getQuota,
     registerUser,
     verifyLogin,
