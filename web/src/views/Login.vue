@@ -13,6 +13,7 @@ const userStore = useUserStore()
 const appVersion = __APP_VERSION__
 const gameVersion = ref('')
 const activeTab = ref('login')
+const wxGameVersion = ref('')
 
 // login
 const username = ref('')
@@ -211,6 +212,7 @@ async function fetchGameVersion() {
     const res = await api.get('/api/game-version')
     if (res.data.ok)
       gameVersion.value = res.data.clientVersion
+      wxGameVersion.value = res.data.wxClientVersion || ''
   }
   catch (e) {
     console.error('获取游戏版本失败:', e)
@@ -388,7 +390,8 @@ onMounted(fetchGameVersion)
       <footer class="card-footer">
         <div class="footer-info">
           <span>Web v{{ appVersion }}</span>
-          <span v-if="gameVersion">Game {{ gameVersion }}</span>
+          <span v-if="gameVersion">QQ {{ gameVersion }}</span>
+          <span v-if="wxGameVersion">微信 {{ wxGameVersion }}</span>
         </div>
         <div class="footer-actions">
           <a href="https://github.com/liyangpengs/qq-farm-bot" target="_blank" rel="noopener noreferrer" class="github-link" aria-label="GitHub">
@@ -571,7 +574,8 @@ onMounted(fetchGameVersion)
 
 .footer-info {
   display: flex;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 4px 12px;
 }
 
 .footer-actions {
