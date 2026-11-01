@@ -34,6 +34,13 @@ export const menuRoutes: MenuItem[] = [
     component: () => import('@/views/Personal.vue'),
   },
   {
+    path: 'illustrated',
+    name: 'illustrated',
+    label: '图鉴',
+    icon: 'i-carbon-book',
+    component: () => import('@/views/Illustrated.vue'),
+  },
+  {
     path: 'activity',
     name: 'activity-center',
     label: '活动',
