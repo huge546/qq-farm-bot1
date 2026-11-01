@@ -10,6 +10,7 @@ const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const CARDS_FILE = path.join(DATA_DIR, 'cards.json');
 
 const userStore = require('../dist/models/user-store');
+const cardStore = require('../dist/models/card-store');
 const security = require('../dist/models/auth-security');
 
 function readIfExists(file) {
@@ -248,4 +249,20 @@ test('下线提醒会规范化渠道和离线删除时间', () => {
 test('用户不存在时不能保存下线提醒', () => {
     setFixture([], []);
     assert.equal(userStore.setUserOfflineReminder('u_missing', {}).ok, false);
+});
+
+test('删除已使用的卡密后从列表移除', () => {
+    setFixture(
+        [makeUser({ id: 'u_del', cards: ['AAAA-BBBB-CCCC-DDDD'], durationEnd: Date.now() + DAY })],
+        [makeCard({ redeemedBy: 'u_del', redeemedAt: Date.now() })],
+    );
+
+    assert.notEqual(cardStore.findCard('AAAA-BBBB-CCCC-DDDD'), null);
+    assert.equal(cardStore.deleteCard('AAAA-BBBB-CCCC-DDDD').ok, true);
+    assert.equal(cardStore.findCard('AAAA-BBBB-CCCC-DDDD'), null);
+});
+
+test('删除不存在的卡密返回错误', () => {
+    setFixture([], []);
+    assert.equal(cardStore.deleteCard('XXXX-XXXX-XXXX-XXXX').ok, false);
 });

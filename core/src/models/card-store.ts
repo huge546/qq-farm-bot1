@@ -129,6 +129,16 @@ function setCardStatus(codeRaw: unknown, status: 'active' | 'disabled'): { ok: b
     return { ok: true };
 }
 
+function deleteCard(codeRaw: unknown): { ok: boolean; error?: string } {
+    const data = loadCards();
+    const code = String(codeRaw || '').trim().toUpperCase().replace(/[-\s]/g, '');
+    const index = data.cards.findIndex(c => c.code.replace(/[-\s]/g, '') === code);
+    if (index < 0) return { ok: false, error: '卡密不存在' };
+    data.cards.splice(index, 1);
+    saveCards(data);
+    return { ok: true };
+}
+
 function listCards(): CardRecord[] {
     return loadCards().cards;
 }
@@ -150,6 +160,7 @@ module.exports = {
     validateCard,
     redeemCard,
     setCardStatus,
+    deleteCard,
     listCards,
     getStats,
 };

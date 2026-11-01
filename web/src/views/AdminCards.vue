@@ -151,6 +151,31 @@ function batchToggle() {
   })
 }
 
+function deleteCard(card: any) {
+  dialog.warning({
+    title: '确认删除',
+    content: `确定要删除已使用的卡密 ${card.code} 吗？删除后记录不可恢复。`,
+    positiveText: '删除',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      try {
+        const res = await api.delete(`/api/admin/cards/${encodeURIComponent(card.code)}`)
+        if (res.data.ok) {
+          checkedKeys.value = checkedKeys.value.filter(key => key !== card.code)
+          await loadCards()
+          toastStore.success('已删除')
+        }
+        else {
+          toastStore.error(res.data.error || '删除失败')
+        }
+      }
+      catch (e: any) {
+        toastStore.error(e.response?.data?.error || e.message || '删除失败')
+      }
+    },
+  })
+}
+
 const filteredCards = computed(() => {
   const s = search.value.trim().toLowerCase()
   return cards.value.filter((c) => {
@@ -190,10 +215,13 @@ const columns = computed<DataTableColumns<any>>(() => [
   {
     title: '操作',
     key: 'actions',
-    width: 140,
+    width: 180,
     render: (row: any) => h('div', { class: 'flex items-center gap-1' }, [
       h(NButton, { size: 'tiny', quaternary: true, onClick: () => copyText(row.code, '已复制卡密') }, { default: () => '复制' }),
       h(NButton, { size: 'tiny', quaternary: true, onClick: () => toggleStatus(row) }, { default: () => row.status === 'disabled' ? '启用' : '停用' }),
+      ...(row.redeemedAt
+        ? [h(NButton, { size: 'tiny', quaternary: true, type: 'error', onClick: () => deleteCard(row) }, { default: () => '删除' })]
+        : []),
     ]),
   },
 ])

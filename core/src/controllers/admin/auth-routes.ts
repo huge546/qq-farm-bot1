@@ -254,6 +254,17 @@ function mountAuthRoutes(app: Application, ctx: AdminContext): void {
         if (!result.ok) return res.status(404).json({ ok: false, error: result.error });
         res.json({ ok: true });
     });
+
+    // API: 删除卡密（管理员）
+    app.delete('/api/admin/cards/:code', adminRequired, (req: Request, res: Response) => {
+        const card = cardStore.findCard(req.params.code);
+        if (!card) return res.status(404).json({ ok: false, error: '卡密不存在' });
+        if (!card.redeemedAt) return res.status(400).json({ ok: false, error: '仅可删除已使用的卡密' });
+        const result = cardStore.deleteCard(req.params.code);
+        if (!result.ok) return res.status(404).json({ ok: false, error: result.error });
+        userStore.invalidateUserCaches();
+        res.json({ ok: true });
+    });
 }
 
 module.exports = { mountAuthRoutes };
