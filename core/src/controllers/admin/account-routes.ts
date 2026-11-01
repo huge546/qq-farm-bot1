@@ -11,6 +11,7 @@ const { addOrUpdateAccount, deleteAccount, countAccountsByUser } = store;
 const { findAccountByRef } = require('../../services/account-resolver');
 const { updateRuntimeConfig, getRuntimeConfig, getDefaultSystemConfig, getDevicePresets, getTimeZoneOptions } = require('../../config/config');
 const userStore = require('../../models/user-store');
+const { DEFAULT_OFFLINE_REMINDER } = require('../../models/store/offline-reminder');
 
 const {
     getAccId,
@@ -22,6 +23,13 @@ const {
     isUserOwnerOfAccount,
     createAdminRequired,
 } = require('./middleware');
+
+function getSessionOfflineReminder(session: { role: 'admin' | 'user'; userId?: string } | null): any {
+    if (session && session.role === 'user' && session.userId) {
+        return userStore.getUserOfflineReminder(session.userId);
+    }
+    return store.getOfflineReminder ? store.getOfflineReminder() : { ...DEFAULT_OFFLINE_REMINDER };
+}
 
 function mountAccountRoutes(app: Application, ctx: AdminContext): void {
     const adminRequired = createAdminRequired(ctx);
@@ -336,6 +344,15 @@ function mountAccountRoutes(app: Application, ctx: AdminContext): void {
         }
     });
 
+    // API: 获取当前账号的下线提醒配置
+    app.get('/api/settings/offline-reminder', (req: Request, res: Response) => {
+        try {
+            res.json({ ok: true, data: getSessionOfflineReminder(getAuthSession(req)) });
+        } catch (e: any) {
+            handleApiError(res, e);
+        }
+    });
+
     // API: 保存下线提醒配置
     app.post('/api/settings/offline-reminder', async (req: Request, res: Response) => {
         try {
@@ -349,6 +366,12 @@ function mountAccountRoutes(app: Application, ctx: AdminContext): void {
                     return res.status(400).json({ ok: false, error: error?.message || '钉钉 Webhook 地址格式无效' });
                 }
             }
+            const session = getAuthSession(req);
+            if (session && session.role === 'user' && session.userId) {
+                const result = userStore.setUserOfflineReminder(session.userId, body);
+                if (!result.ok) return res.status(400).json({ ok: false, error: result.error });
+                return res.json({ ok: true, data: result.data || {} });
+            }
             const data = store.setOfflineReminder ? store.setOfflineReminder(body) : {};
             res.json({ ok: true, data: data || {} });
         } catch (e: any) {
@@ -359,7 +382,7 @@ function mountAccountRoutes(app: Application, ctx: AdminContext): void {
     // API: 测试下线提醒推送（不落盘）
     app.post('/api/settings/offline-reminder/test', async (req: Request, res: Response) => {
         try {
-            const saved = store.getOfflineReminder ? store.getOfflineReminder() : {};
+            const saved = getSessionOfflineReminder(getAuthSession(req));
             const body = (req.body && typeof req.body === 'object') ? req.body : {};
             const cfg = { ...(saved || {}), ...body };
 
@@ -442,9 +465,7 @@ function mountAccountRoutes(app: Application, ctx: AdminContext): void {
             const autoAcceptHarvestStealHarvest = id && (typeof store.getAutoAcceptHarvestStealHarvest === 'function') ? store.getAutoAcceptHarvestStealHarvest(id) : 8;
             const autoAcceptHarvestStealSteal = id && (typeof store.getAutoAcceptHarvestStealSteal === 'function') ? store.getAutoAcceptHarvestStealSteal(id) : 1;
             const ui = store.getUI();
-            const offlineReminder = store.getOfflineReminder
-                ? store.getOfflineReminder()
-                : { channel: 'webhook', endpoint: '', token: '', secret: '', title: '账号下线提醒', msg: '账号下线', offlineDeleteSec: 0 };
+            const offlineReminder = getSessionOfflineReminder(getAuthSession(req));
             res.json({ ok: true, data: { intervals, strategy, preferredSeed, friendQuietHours, automation, stealDelaySeconds, plantOrderRandom, plantDelaySeconds, fertilizerBuyOrganicCount, fertilizerBuyOrganicThresholdHours, fertilizerBuyNormalCount, fertilizerBuyNormalThresholdHours, fertilizerBuyCheckIntervalMinutes, bagSeedPriority, bagSeedMultiLandReservationEnabled, bagSeedLandTypes, bagSeedFallbackStrategy, autoAcceptFriendMinLevel, autoAcceptRequireOwnLevel, autoAcceptHarvestStealEnabled, autoAcceptHarvestStealHarvest, autoAcceptHarvestStealSteal, ui, offlineReminder } });
         } catch (e: any) {
             handleApiError(res, e);

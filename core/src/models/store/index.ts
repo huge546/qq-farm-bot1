@@ -3,6 +3,23 @@ const sharedState = require('./shared-state');
 const globalConfig = require('./global-config');
 const accountConfig = require('./account-config');
 const accounts = require('./accounts');
+const userStore = require('../user-store');
+
+function getOfflineReminderForAccount(accountId: unknown): any {
+    const id = String(accountId || '').trim();
+    if (id) {
+        try {
+            const account = accounts.getAccounts().accounts.find((item: any) => String(item.id || '') === id);
+            if (!account) return null;
+            const userId = String((account && account.userId) || '').trim();
+            if (userId) return userStore.getUserOfflineReminder(userId);
+        } catch {
+            // Never fall back to the global channel when account ownership is unknown.
+            return null;
+        }
+    }
+    return globalConfig.getOfflineReminder();
+}
 
 module.exports = {
     // Account config
@@ -52,6 +69,7 @@ module.exports = {
     setLoginSettings: globalConfig.setLoginSettings,
     getOfflineReminder: globalConfig.getOfflineReminder,
     setOfflineReminder: globalConfig.setOfflineReminder,
+    getOfflineReminderForAccount,
 
     // Accounts
     getAccounts: accounts.getAccounts,

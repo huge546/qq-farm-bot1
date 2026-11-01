@@ -199,3 +199,53 @@ test('listUsersForAdmin 汇总基础额度、卡密额度与管理员额度', ()
     assert.equal(row.remaining, 4);
     assert.equal(row.expired, false);
 });
+
+test('普通用户的下线提醒按用户独立保存', () => {
+    setFixture([
+        makeUser({ id: 'u_mail_a', username: 'mail_a', cards: [], durationEnd: Date.now() + DAY }),
+        makeUser({ id: 'u_mail_b', username: 'mail_b', cards: [], durationEnd: Date.now() + DAY }),
+    ], []);
+
+    assert.equal(userStore.getUserOfflineReminder('u_mail_a').endpoint, '');
+    const saved = userStore.setUserOfflineReminder('u_mail_a', {
+        channel: 'dingtalk',
+        endpoint: 'https://oapi.dingtalk.com/robot/send?access_token=test',
+        secret: 'SEC-test',
+        title: 'A 的提醒',
+        msg: 'A 下线了',
+        offlineDeleteSec: 30,
+    });
+    assert.equal(saved.ok, true);
+
+    const a = userStore.getUserOfflineReminder('u_mail_a');
+    assert.equal(a.channel, 'dingtalk');
+    assert.equal(a.endpoint, 'https://oapi.dingtalk.com/robot/send?access_token=test');
+    assert.equal(a.offlineDeleteSec, 30);
+
+    userStore.setUserOfflineReminder('u_mail_a', { msg: 'A 又下线了' });
+    const partial = userStore.getUserOfflineReminder('u_mail_a');
+    assert.equal(partial.msg, 'A 又下线了');
+    assert.equal(partial.endpoint, 'https://oapi.dingtalk.com/robot/send?access_token=test');
+    assert.equal(partial.offlineDeleteSec, 30);
+    assert.equal(userStore.getUserOfflineReminder('u_mail_b').endpoint, '');
+});
+
+test('下线提醒会规范化渠道和离线删除时间', () => {
+    setFixture([makeUser({ id: 'u_mail', cards: [], durationEnd: Date.now() + DAY })], []);
+
+    userStore.setUserOfflineReminder('u_mail', {
+        channel: 'unknown-channel',
+        offlineDeleteSec: -5,
+        extra: 'not-saved',
+    });
+
+    const cfg = userStore.getUserOfflineReminder('u_mail');
+    assert.equal(cfg.channel, 'webhook');
+    assert.equal(cfg.offlineDeleteSec, 0);
+    assert.equal('extra' in cfg, false);
+});
+
+test('用户不存在时不能保存下线提醒', () => {
+    setFixture([], []);
+    assert.equal(userStore.setUserOfflineReminder('u_missing', {}).ok, false);
+});

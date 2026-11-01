@@ -26,7 +26,7 @@ interface WorkerManagerOptions {
     addAccountLog: (action: string, msg: string, accountId?: string, accountName?: string, extra?: any) => void;
     normalizeStatusForPanel: (data: any, accountId: string, accountName: string) => any;
     buildConfigSnapshotForAccount: (accountId: string) => any;
-    getOfflineAutoDeleteMs: () => number;
+    getOfflineAutoDeleteMs: (accountId?: string) => number;
     triggerOfflineReminder: (payload: any) => void;
     sendConfiguredPush?: (payload: any) => Promise<void> | void;
     addOrUpdateAccount: (acc: any) => any;
@@ -301,7 +301,7 @@ function createWorkerManager(options: WorkerManagerOptions) {
                 const now = Date.now();
                 if (!worker.disconnectedSince) worker.disconnectedSince = now;
                 const offlineMs = now - worker.disconnectedSince;
-                const autoDeleteMs = getOfflineAutoDeleteMs();
+                const autoDeleteMs = getOfflineAutoDeleteMs(accountId);
                 if (!worker.autoDeleteTriggered && offlineMs >= autoDeleteMs) {
                     worker.autoDeleteTriggered = true;
                     const offlineMin = Math.floor(offlineMs / 60000);

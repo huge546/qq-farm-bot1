@@ -1,10 +1,11 @@
-import type { AccountConfig, AutomationConfig, BagSeedFallbackStrategy, FertilizerLandType, GlobalConfig, IntervalConfig, LoginSettings, OfflineReminder, PlantingStrategy, QuietHoursConfig } from '../../types/config';
+import type { AccountConfig, AutomationConfig, BagSeedFallbackStrategy, FertilizerLandType, GlobalConfig, IntervalConfig, LoginSettings, PlantingStrategy, QuietHoursConfig } from '../../types/config';
 export {};
 
 const { DEFAULT_TIME_ZONE, normalizeTimeZone, resolveClientVersion } = require('../../config/config');
 const { getDataFile, ensureDataDir } = require('../../config/runtime-paths');
 const { createConfigStorage } = require('./config-storage');
 const { storageError } = require('../../services/json-db');
+const { PUSHOO_CHANNELS, DEFAULT_OFFLINE_REMINDER } = require('./offline-reminder');
 
 const STORE_FILE: string = getDataFile('store.json');
 const ACCOUNTS_FILE: string = getDataFile('accounts.json');
@@ -13,13 +14,6 @@ const KNOWN_FRIEND_GIDS_DIR: string = getDataFile('known_friend_gids');
 
 const ALLOWED_PLANTING_STRATEGIES: PlantingStrategy[] = ['preferred', 'level', 'max_exp', 'max_fert_exp', 'max_profit', 'max_fert_profit', 'bag_priority'];
 const ALLOWED_BAG_SEED_FALLBACK_STRATEGIES: BagSeedFallbackStrategy[] = ALLOWED_PLANTING_STRATEGIES.filter((s): s is BagSeedFallbackStrategy => s !== 'bag_priority');
-const PUSHOO_CHANNELS: Set<string> = new Set([
-    'webhook', 'qmsg', 'serverchan', 'pushplus', 'pushplushxtrip',
-    'dingtalk', 'wecom', 'bark', 'gocqhttp', 'onebot', 'atri',
-    'pushdeer', 'igot', 'telegram', 'feishu', 'ifttt', 'wecombot',
-    'discord', 'wxpusher', 'meow',
-]);
-
 const DEFAULT_FERTILIZER_LAND_TYPES: FertilizerLandType[] = ['purple-gold', 'gold', 'black', 'red', 'normal'];
 const FERTILIZER_LAND_TYPE_SET: Set<string> = new Set(DEFAULT_FERTILIZER_LAND_TYPES);
 const INTERVAL_MAX_SEC: number = 86400;
@@ -27,16 +21,6 @@ const DEFAULT_KNOWN_FRIEND_GID_SYNC_COOLDOWN_SEC: number = 300;
 const DEFAULT_FRIENDS_LIST_CACHE_TTL_SEC: number = 60;
 let systemConfigMigrated: boolean = false;
 let accountFallbackConfig: AccountConfig;
-
-const DEFAULT_OFFLINE_REMINDER: OfflineReminder = {
-    channel: 'webhook',
-    endpoint: '',
-    token: '',
-    secret: '',
-    title: '账号下线提醒',
-    msg: '账号下线',
-    offlineDeleteSec: 0,
-};
 
 const DEFAULT_LOGIN_SETTINGS: LoginSettings = {
     wechatQrLogin: true,

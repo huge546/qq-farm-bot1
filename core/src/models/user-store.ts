@@ -7,6 +7,7 @@ const { getDataFile, ensureDataDir } = require('../config/runtime-paths');
 const { readJsonFile, writeJsonFileAtomic } = require('../services/json-db');
 const security = require('./auth-security');
 const cardStore = require('./card-store');
+const { normalizeOfflineReminder } = require('./store/offline-reminder');
 
 const USERS_FILE: string = getDataFile('users.json');
 
@@ -23,6 +24,7 @@ interface UserRecord {
     cards: string[];
     durationEnd: number;
     bonusAccounts: number;
+    offlineReminder?: any;
 }
 
 interface UsersData {
@@ -31,7 +33,7 @@ interface UsersData {
 
 function normalizeUser(raw: any): UserRecord | null {
     if (!raw || typeof raw !== 'object' || !String(raw.username || '').trim()) return null;
-    return {
+    const user: UserRecord = {
         id: String(raw.id || ''),
         username: String(raw.username || '').trim(),
         password: String(raw.password || ''),
@@ -42,6 +44,10 @@ function normalizeUser(raw: any): UserRecord | null {
         durationEnd: Number(raw.durationEnd) || 0,
         bonusAccounts: Math.max(0, Number.parseInt(raw.bonusAccounts, 10) || 0),
     };
+    if (raw.offlineReminder && typeof raw.offlineReminder === 'object') {
+        user.offlineReminder = normalizeOfflineReminder(raw.offlineReminder);
+    }
+    return user;
 }
 
 function loadUsers(): UsersData {
@@ -342,6 +348,24 @@ function addUserBonusAccounts(userId: unknown, count: number): { ok: boolean; er
     return { ok: true, bonusAccounts: target.bonusAccounts };
 }
 
+function getUserOfflineReminder(userId: unknown): any {
+    const user = findUserById(userId);
+    return normalizeOfflineReminder(user ? user.offlineReminder : null);
+}
+
+function setUserOfflineReminder(userId: unknown, config: unknown): { ok: boolean; error?: string; data?: any } {
+    const user = findUserById(userId);
+    if (!user) return { ok: false, error: '用户不存在' };
+    const data = loadUsers();
+    const target = data.users.find(u => u.id === user.id);
+    if (!target) return { ok: false, error: '用户不存在' };
+    const patch = (config && typeof config === 'object') ? config : {};
+    target.offlineReminder = normalizeOfflineReminder({ ...(target.offlineReminder || {}), ...patch });
+    target.updatedAt = Date.now();
+    saveUsers(data);
+    return { ok: true, data: target.offlineReminder };
+}
+
 function deleteUser(userId: unknown): { ok: boolean; error?: string; user?: any } {
     const user = findUserById(userId);
     if (!user) return { ok: false, error: '用户不存在' };
@@ -404,6 +428,8 @@ module.exports = {
     listUsersForAdmin,
     setUserDuration,
     addUserBonusAccounts,
+    getUserOfflineReminder,
+    setUserOfflineReminder,
     deleteUser,
     reconcileExpired,
 };

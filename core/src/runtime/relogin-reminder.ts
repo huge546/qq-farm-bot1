@@ -16,14 +16,21 @@ interface OfflineReminderPayload {
 function createReloginReminderService(options: ReloginReminderOptions) {
     const { store, sendPushooMessage, log } = options;
 
-    function getOfflineAutoDeleteMs(): number {
-        const cfg = store.getOfflineReminder ? store.getOfflineReminder() : null;
+    function resolveReminderConfig(accountId?: string): any {
+        if (store.getOfflineReminderForAccount) {
+            return store.getOfflineReminderForAccount(accountId);
+        }
+        return store.getOfflineReminder ? store.getOfflineReminder() : null;
+    }
+
+    function getOfflineAutoDeleteMs(accountId?: string): number {
+        const cfg = resolveReminderConfig(accountId);
         const sec = Math.max(0, Number.parseInt(cfg?.offlineDeleteSec, 10) || 0);
         return sec === 0 ? Infinity : sec * 1000;
     }
 
-    function resolvePushChannel(): { ok: true; channel: string; endpoint: string; token: string; secret: string } | { ok: false; reason: string } {
-        const cfg = store.getOfflineReminder ? store.getOfflineReminder() : null;
+    function resolvePushChannel(accountId?: string): { ok: true; channel: string; endpoint: string; token: string; secret: string } | { ok: false; reason: string } {
+        const cfg = resolveReminderConfig(accountId);
         if (!cfg) return { ok: false, reason: '未找到下线提醒配置' };
 
         const channel = String(cfg.channel || '').trim().toLowerCase();
@@ -45,7 +52,7 @@ function createReloginReminderService(options: ReloginReminderOptions) {
         const title = accountName ? `${baseTitle} ${accountName}` : baseTitle;
         const logLabel = String(payload.logLabel || '事件提醒').trim() || '事件提醒';
         try {
-            const channelCfg = resolvePushChannel();
+            const channelCfg = resolvePushChannel(accountId);
             if (channelCfg.ok === false) {
                 log('错误', channelCfg.reason);
                 return;
@@ -77,11 +84,15 @@ function createReloginReminderService(options: ReloginReminderOptions) {
             const accountId = String(payload.accountId || '').trim();
             const accountName = String(payload.accountName || '').trim();
             const reason = String(payload.reason || 'unknown');
-            log('系统', `触发下线提醒: 账号=${accountName || accountId}, 原因=${reason}`, { accountId, accountName, reason });
 
-            const cfg = store.getOfflineReminder ? store.getOfflineReminder() : null;
+            const cfg = resolveReminderConfig(accountId);
             if (!cfg) {
-                log('错误', '未找到下线提醒配置');
+                log('系统', `账号未配置下线提醒，跳过推送: ${accountName || accountId}`);
+                return;
+            }
+            const channelCfg = resolvePushChannel(accountId);
+            if (channelCfg.ok === false) {
+                log('系统', `账号未配置可用的下线提醒渠道，跳过推送: ${accountName || accountId} (${channelCfg.reason})`);
                 return;
             }
 
@@ -92,6 +103,7 @@ function createReloginReminderService(options: ReloginReminderOptions) {
                 return;
             }
 
+            log('系统', `触发下线提醒: 账号=${accountName || accountId}, 原因=${reason}`, { accountId, accountName, reason });
             await sendConfiguredPush({ title: baseTitle, content, accountId, accountName, logLabel: '下线提醒' });
         } catch (e: any) {
             log('错误', `下线提醒发送异常: ${e.message}`);

@@ -347,5 +347,22 @@ export const useSettingStore = defineStore('setting', () => {
     }
   }
 
-  return { settings, loading, loadedAccountId, fetchSettings, saveSettings, saveOfflineConfig }
+  async function fetchOfflineConfig() {
+    try {
+      const { data } = await api.get('/api/settings/offline-reminder')
+      if (data && data.ok && data.data) {
+        settings.value.offlineReminder = {
+          ...createDefaultSettings().offlineReminder,
+          ...cloneValue(data.data),
+        }
+        return true
+      }
+      return false
+    }
+    catch {
+      return false
+    }
+  }
+
+  return { settings, loading, loadedAccountId, fetchSettings, fetchOfflineConfig, saveSettings, saveOfflineConfig }
 })

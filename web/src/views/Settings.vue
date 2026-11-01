@@ -35,14 +35,14 @@ const userStore = useUserStore()
 const settingStore = useSettingStore()
 const statusStore = useStatusStore()
 
-type SettingsTab = 'account' | 'strategy' | 'automation' | 'system'
+type SettingsTab = 'account' | 'strategy' | 'automation' | 'notify' | 'system'
 const storedTab = localStorage.getItem('settings-active-tab')
-const settingsTabKeys: SettingsTab[] = ['account', 'strategy', 'automation', 'system']
+const settingsTabKeys: SettingsTab[] = ['account', 'strategy', 'automation', 'notify', 'system']
 const queryTab = String(route.query.tab || '')
 const initialTab = (() => {
   const candidate = settingsTabKeys.includes(queryTab as SettingsTab)
     ? queryTab as SettingsTab
-    : storedTab === 'user' ? 'system' : (storedTab as SettingsTab) || 'account'
+    : storedTab === 'user' ? 'notify' : (storedTab as SettingsTab) || 'account'
   // 普通用户不允许系统设置 tab
   if (candidate === 'system' && !userStore.isAdmin)
     return 'account' as SettingsTab
@@ -72,6 +72,7 @@ const tabs = computed(() => {
     { key: 'account', label: '账号管理', icon: 'i-carbon-user-profile' },
     { key: 'strategy', label: '策略设置', icon: 'i-carbon-settings-adjust' },
     { key: 'automation', label: '自动控制', icon: 'i-carbon-settings-adjust' },
+    { key: 'notify', label: '通知设置', icon: 'i-carbon-notification' },
   ]
   if (userStore.isAdmin)
     base.push({ key: 'system', label: '系统设置', icon: 'i-carbon-settings' })
@@ -151,7 +152,11 @@ onMounted(async () => {
   }
   if (currentAccountId.value)
     await loadStrategyData(currentAccountId.value)
-  await Promise.all([loadSystemConfig(), loadDevicePresets()])
+  await Promise.all([
+    settingStore.fetchOfflineConfig(),
+    userStore.isAdmin ? loadSystemConfig() : Promise.resolve(),
+    userStore.isAdmin ? loadDevicePresets() : Promise.resolve(),
+  ])
 })
 
 function openSettings(account: any) {
@@ -1945,6 +1950,119 @@ async function handleResetSystemConfig() {
           />
         </div>
 
+        <!-- 通知设置 -->
+        <div v-else-if="activeTab === 'notify'" class="space-y-4">
+          <h3 class="text-lg text-gray-900 font-bold dark:text-gray-100">
+            通知设置
+          </h3>
+
+          <section class="farm-card max-w-2xl rounded-lg p-4">
+            <div class="mb-4 flex items-start gap-3">
+              <div class="h-9 w-9 flex shrink-0 items-center justify-center rounded-lg bg-green-50 text-green-600 dark:bg-green-900/25 dark:text-green-400">
+                <span class="i-carbon-notification text-xl" />
+              </div>
+              <div>
+                <h4 class="text-base text-gray-900 font-bold dark:text-gray-100">
+                  下线提醒
+                </h4>
+                <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                  {{ userStore.isAdmin ? '配置无归属账号的全局下线提醒与清理' : '配置本人账号离线后的通知与清理' }}
+                </p>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div class="min-w-0 flex flex-col gap-1.5">
+                <div class="min-h-6 flex items-center justify-between gap-2">
+                  <span class="text-sm text-gray-700 font-medium dark:text-gray-300">推送渠道</span>
+                  <BaseButton
+                    variant="text"
+                    size="sm"
+                    :disabled="!currentChannelDocUrl"
+                    @click="openChannelDocs"
+                  >
+                    官方文档
+                  </BaseButton>
+                </div>
+                <BaseSelect
+                  v-model="localOffline.channel"
+                  :options="channelOptions"
+                />
+              </div>
+
+              <BaseInput
+                v-if="offlineChannelUsesEndpoint"
+                v-model="localOffline.endpoint"
+                :label="offlineEndpointLabel"
+                type="text"
+                :placeholder="offlineEndpointPlaceholder"
+              />
+
+              <BaseInput
+                v-if="!isDingTalkChannel"
+                v-model="localOffline.token"
+                :label="offlineTokenLabel"
+                type="text"
+                :placeholder="offlineTokenPlaceholder"
+              />
+
+              <template v-else>
+                <BaseInput
+                  v-model="localOffline.secret"
+                  label="加签密钥（可选）"
+                  type="password"
+                  placeholder="仅在机器人开启加签时填写 SEC..."
+                />
+                <p class="text-xs text-gray-500 leading-relaxed sm:col-span-2 dark:text-gray-400">
+                  从群机器人的设置页复制完整 Webhook；只有开启“加签”时才需要填写加签密钥。
+                </p>
+              </template>
+
+              <BaseInput
+                v-model="localOffline.title"
+                label="标题"
+                type="text"
+                placeholder="提醒标题"
+              />
+              <BaseInput
+                v-model.number="localOffline.offlineDeleteSec"
+                label="离线删除账号 (秒)"
+                type="number"
+                min="0"
+                placeholder="0 表示不删除"
+              />
+              <BaseInput
+                v-model="localOffline.msg"
+                label="内容"
+                type="text"
+                placeholder="提醒内容"
+                class="sm:col-span-2"
+              />
+            </div>
+
+            <div class="mt-3 flex justify-end gap-2 border-t pt-3 dark:border-gray-700">
+              <BaseButton
+                variant="secondary"
+                size="sm"
+                :loading="offlineTesting"
+                :disabled="offlineSaving"
+                @click="handleTestOffline"
+              >
+                测试通知
+              </BaseButton>
+              <BaseButton
+                variant="primary"
+                size="sm"
+                :loading="offlineSaving"
+                :disabled="offlineTesting"
+                @click="handleSaveOffline"
+              >
+                保存下线提醒设置
+              </BaseButton>
+            </div>
+          </section>
+        </div>
+
         <!-- 系统设置 -->
         <div v-else-if="activeTab === 'system'" class="space-y-4">
           <h3 class="text-lg text-gray-900 font-bold dark:text-gray-100">
@@ -2195,112 +2313,6 @@ async function handleResetSystemConfig() {
                     @click="handleChangePassword"
                   >
                     修改管理员密码
-                  </BaseButton>
-                </div>
-              </section>
-
-              <section class="farm-card rounded-lg p-4">
-                <div class="mb-4 flex items-start gap-3">
-                  <div class="h-9 w-9 flex shrink-0 items-center justify-center rounded-lg bg-green-50 text-green-600 dark:bg-green-900/25 dark:text-green-400">
-                    <span class="i-carbon-notification text-xl" />
-                  </div>
-                  <div>
-                    <h4 class="text-base text-gray-900 font-bold dark:text-gray-100">
-                      下线提醒
-                    </h4>
-                    <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                      配置账号离线后的通知与清理
-                    </p>
-                  </div>
-                </div>
-
-                <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div class="min-w-0 flex flex-col gap-1.5">
-                    <div class="min-h-6 flex items-center justify-between gap-2">
-                      <span class="text-sm text-gray-700 font-medium dark:text-gray-300">推送渠道</span>
-                      <BaseButton
-                        variant="text"
-                        size="sm"
-                        :disabled="!currentChannelDocUrl"
-                        @click="openChannelDocs"
-                      >
-                        官方文档
-                      </BaseButton>
-                    </div>
-                    <BaseSelect
-                      v-model="localOffline.channel"
-                      :options="channelOptions"
-                    />
-                  </div>
-
-                  <BaseInput
-                    v-if="offlineChannelUsesEndpoint"
-                    v-model="localOffline.endpoint"
-                    :label="offlineEndpointLabel"
-                    type="text"
-                    :placeholder="offlineEndpointPlaceholder"
-                  />
-
-                  <BaseInput
-                    v-if="!isDingTalkChannel"
-                    v-model="localOffline.token"
-                    :label="offlineTokenLabel"
-                    type="text"
-                    :placeholder="offlineTokenPlaceholder"
-                  />
-
-                  <template v-else>
-                    <BaseInput
-                      v-model="localOffline.secret"
-                      label="加签密钥（可选）"
-                      type="password"
-                      placeholder="仅在机器人开启加签时填写 SEC..."
-                    />
-                    <p class="text-xs text-gray-500 leading-relaxed sm:col-span-2 dark:text-gray-400">
-                      从群机器人的设置页复制完整 Webhook；只有开启“加签”时才需要填写加签密钥。
-                    </p>
-                  </template>
-
-                  <BaseInput
-                    v-model="localOffline.title"
-                    label="标题"
-                    type="text"
-                    placeholder="提醒标题"
-                  />
-                  <BaseInput
-                    v-model.number="localOffline.offlineDeleteSec"
-                    label="离线删除账号 (秒)"
-                    type="number"
-                    min="0"
-                    placeholder="0 表示不删除"
-                  />
-                  <BaseInput
-                    v-model="localOffline.msg"
-                    label="内容"
-                    type="text"
-                    placeholder="提醒内容"
-                    class="sm:col-span-2"
-                  />
-                </div>
-
-                <div class="mt-3 flex justify-end gap-2 border-t pt-3 dark:border-gray-700">
-                  <BaseButton
-                    variant="secondary"
-                    size="sm"
-                    :loading="offlineTesting"
-                    :disabled="offlineSaving"
-                    @click="handleTestOffline"
-                  >
-                    测试通知
-                  </BaseButton>
-                  <BaseButton
-                    variant="primary"
-                    size="sm"
-                    :loading="offlineSaving"
-                    :disabled="offlineTesting"
-                    @click="handleSaveOffline"
-                  >
-                    保存下线提醒设置
                   </BaseButton>
                 </div>
               </section>
