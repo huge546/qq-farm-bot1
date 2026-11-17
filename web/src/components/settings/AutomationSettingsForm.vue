@@ -25,6 +25,8 @@ export type AutomationSettingsFormModel = Pick<
 withDefaults(defineProps<{
   inRanch?: boolean
   panel?: 'automation' | 'strategy'
+  /** 页面级统一保存时隐藏表单自带的底部按钮。 */
+  hideSave?: boolean
   ranchAnimalOptions?: Array<{ value: number, label: string, kind: string }>
   saving: boolean
   fertilizerLandTypeOptions: Array<{ label: string, value: string }>
@@ -50,6 +52,7 @@ const ranchSwitches = [
   ['ranch_feed_organic', '有机罐头喂养'],
   ['ranch_task', '自动领取任务奖励'],
   ['ranch_share', '每日分享礼包'],
+  ['ranch_daily_benefit', '每日商城福利'],
 ] as const
 const ranchFriendSwitches = [
   ['ranch_friend_steal', '自动偷取产物'],
@@ -85,6 +88,9 @@ const ranchStrategies = [
           <div v-if="panel === 'automation'" class="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <div v-for="[key, label] in ranchSwitches" :key="key" class="automation-setting-item">
               <BaseSwitch v-model="settings.automation[key]" :label="label" :disabled="key === 'ranch_grass_buy' && !settings.automation.ranch_grass" />
+            </div>
+            <div class="automation-setting-item">
+              <BaseInput v-model.number="settings.automation.ranch_grass_threshold_percent" class="w-full" label="牧草余量低于（%）时补满" type="number" min="1" max="100" step="1" :disabled="!settings.automation.ranch_grass" />
             </div>
             <div class="automation-setting-item">
               <BaseInput v-model.number="settings.automation.ranch_check_minutes" class="w-full" label="巡查间隔（分钟）" type="number" min="1" max="60" step="1" />
@@ -405,7 +411,7 @@ const ranchStrategies = [
       </div>
     </div>
 
-    <div class="flex justify-end gap-2 border-t pt-3 dark:border-gray-700">
+    <div v-if="!hideSave" class="flex justify-end gap-2 border-t pt-3 dark:border-gray-700">
       <BaseButton variant="primary" size="sm" :loading="saving" @click="emit('save')">
         保存自动控制
       </BaseButton>

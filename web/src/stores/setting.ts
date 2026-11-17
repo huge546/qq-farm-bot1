@@ -10,6 +10,7 @@ export interface AutomationConfig {
   ranch_sell?: boolean
   ranch_grass?: boolean
   ranch_grass_buy?: boolean
+  ranch_grass_threshold_percent?: number
   ranch_fill_cans?: boolean
   ranch_feed_normal?: boolean
   ranch_feed_organic?: boolean
@@ -20,6 +21,7 @@ export interface AutomationConfig {
   ranch_friend_mosquito?: boolean
   ranch_task?: boolean
   ranch_share?: boolean
+  ranch_daily_benefit?: boolean
   ranch_check_minutes?: number
   ranch_strategy?: string
   ranch_bag_fallback?: string
