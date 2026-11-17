@@ -95,7 +95,7 @@ const tabs = computed(() => {
   return base
 })
 
-const visibleTabs = computed(() => inRanch.value ? tabs.filter(tab => ranchTabKeys.includes(tab.key)) : tabs)
+const visibleTabs = computed(() => inRanch.value ? tabs.value.filter(tab => ranchTabKeys.includes(tab.key)) : tabs.value)
 
 function setActiveTab(value: string) {
   if (tabs.value.some(tab => tab.key === value))
