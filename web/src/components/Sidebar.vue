@@ -10,7 +10,7 @@ import AccountModal from '@/components/AccountModal.vue'
 import RemarkModal from '@/components/RemarkModal.vue'
 import BrandMark from '@/components/ui/BrandMark.vue'
 import { useCopyFeedback } from '@/composables/useCopyFeedback'
-import { menuRoutes } from '@/router/menu'
+import { getSpaceMenu } from '@/router/menu'
 import { getPlatformClass, getPlatformLabel, useAccountStore } from '@/stores/account'
 import { useAppStore } from '@/stores/app'
 import { useStatusStore } from '@/stores/status'
@@ -286,7 +286,7 @@ const roleLabel = computed(() => (userStore.isAdmin ? '超级管理员' : '普�
 
 const navItems = computed(() => {
   const currentRole = userStore.role || 'admin'
-  return menuRoutes
+  return getSpaceMenu(route.meta.gameSpace === 'ranch')
     .filter((item) => {
       if (!item.meta?.roles) return true
       return item.meta.roles.includes(currentRole as 'admin' | 'user')
@@ -352,11 +352,11 @@ async function copyToken() {
           <div class="sidebar-brand__identity min-w-0 flex items-center gap-2.5">
             <BrandMark class="brand-mark" :size="28" />
             <span v-show="!isSidebarCollapsed" class="min-w-0 truncate text-sm font-display font-semibold">
-              QQ农场智能助手
+              QQ{{ route.meta.gameSpace === 'ranch' ? '牧场' : '农场' }}智能助手
             </span>
           </div>
         </template>
-        QQ农场智能助手
+        QQ{{ route.meta.gameSpace === 'ranch' ? '牧场' : '农场' }}智能助手
       </NTooltip>
       <!-- Mobile Close Button -->
       <NButton
@@ -534,12 +534,12 @@ async function copyToken() {
           v-if="showAccountDropdown"
           class="sidebar-dropdown absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden py-1"
         >
-          <div class="custom-scrollbar max-h-60 overflow-y-auto">
+          <div class="custom-scrollbar max-h-60 overflow-y-auto px-1">
             <template v-if="accounts.length > 0">
               <div
                 v-for="acc in accounts"
                 :key="acc.id || acc.uin"
-                class="flex items-center rounded-xl transition-colors hover:bg-gray-100/50 dark:hover:bg-gray-700/50"
+                class="flex items-center rounded-xl pr-1 transition-colors hover:bg-gray-100/50 dark:hover:bg-gray-700/50"
                 :class="{ 'bg-green-50/50 dark:bg-green-900/20': currentAccount?.id === acc.id }"
                 :style="{ backgroundColor: currentAccount?.id === acc.id ? 'color-mix(in srgb, var(--theme-primary) 10%, transparent)' : undefined }"
               >

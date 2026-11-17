@@ -43,12 +43,12 @@ interface RuntimeConfig extends SystemConfig {
 // ============ 设备预设 ============
 
 // clientVersion 由 CONFIG.clientVersion 动态获取，不写死在预设中
-// Verified in the official QQ PlayerLogin and Heartbeat from the 2026-11-02 capture.
-const DEFAULT_CLIENT_VERSION = '1.16.1.6_20261028';
-const DEFAULT_CLIENT_VERSION_UPDATED_AT = 1793584882772;
-// Independently verified from WeChat package 78 and the running 2026-11-02 miniapp.
-const DEFAULT_WX_CLIENT_VERSION = '1.16.1.6_20261028';
-const DEFAULT_WX_CLIENT_VERSION_UPDATED_AT = 1793588451200;
+// Verified in the official QQ PlayerLogin and Heartbeat from the 2026-11-16 capture.
+const DEFAULT_CLIENT_VERSION = '1.17.0.3_20261117';
+const DEFAULT_CLIENT_VERSION_UPDATED_AT = 1794795016627;
+// Independently verified from WeChat package 81 and the 2026-11-16 login and heartbeat.
+const DEFAULT_WX_CLIENT_VERSION = '1.17.0.3_20261117';
+const DEFAULT_WX_CLIENT_VERSION_UPDATED_AT = 1794797399676;
 const DEFAULT_TIME_ZONE = 'Asia/Shanghai';
 
 function resolveClientVersion(savedVersion: unknown, savedUpdatedAt: unknown, platform = 'qq'): { clientVersion: string; clientVersionUpdatedAt: number } {

@@ -31,6 +31,16 @@ const fertilizerLandTypeOptions = [
 
 const router = useRouter()
 const route = useRoute()
+const inRanch = computed(() => route.meta.gameSpace === 'ranch')
+const ranchAnimalOptions = ref<Array<{ value: number, label: string, kind: string }>>([])
+onMounted(async () => {
+  try {
+    const response = await api.get('/api/ranch/automation-options')
+    if (response.data.ok)
+      ranchAnimalOptions.value = response.data.data
+  }
+  catch (error) { showAlert(getApiErrorMessage(error, '牧场动物选项读取失败'), 'danger') }
+})
 const accountStore = useAccountStore()
 const userStore = useUserStore()
 const settingStore = useSettingStore()
@@ -914,6 +924,7 @@ const localAutomationSettings = ref({
   fertilizerBuyNormalCount: 10,
   fertilizerBuyNormalThresholdHours: 10,
   fertilizerBuyCheckIntervalMinutes: 30,
+  emailClaimHour: 10 as number | string,
   autoAcceptFriendMinLevel: 0,
   autoAcceptRequireOwnLevel: false,
   autoAcceptHarvestStealEnabled: true,
@@ -1013,6 +1024,7 @@ function syncLocalAutomationSettings() {
     localAutomationSettings.value.fertilizerBuyNormalCount = settings.value.fertilizerBuyNormalCount ?? 10
     localAutomationSettings.value.fertilizerBuyNormalThresholdHours = settings.value.fertilizerBuyNormalThresholdHours ?? 10
     localAutomationSettings.value.fertilizerBuyCheckIntervalMinutes = settings.value.fertilizerBuyCheckIntervalMinutes ?? 30
+    localAutomationSettings.value.emailClaimHour = settings.value.emailClaimHour
     localAutomationSettings.value.autoAcceptFriendMinLevel = settings.value.autoAcceptFriendMinLevel ?? 0
     localAutomationSettings.value.autoAcceptRequireOwnLevel = settings.value.autoAcceptRequireOwnLevel ?? false
     localAutomationSettings.value.autoAcceptHarvestStealEnabled = settings.value.autoAcceptHarvestStealEnabled ?? true
@@ -1027,8 +1039,11 @@ async function saveAutomationSettings() {
     return
   automationSaving.value = true
   try {
-    const payload = JSON.parse(JSON.stringify(localAutomationSettings.value))
-    payload.automation.fertilizer_land_types = normalizeFertilizerLandTypes(payload.automation.fertilizer_land_types)
+    const source = localAutomationSettings.value
+    const automation = Object.fromEntries(Object.entries(source.automation).filter(([key]) => key.startsWith('ranch_') === inRanch.value))
+    const payload = inRanch.value ? { automation } : { ...JSON.parse(JSON.stringify(source)), automation }
+    if (!inRanch.value)
+      payload.automation.fertilizer_land_types = normalizeFertilizerLandTypes(payload.automation.fertilizer_land_types)
     const res = await settingStore.saveSettings(accountId, payload)
     if (accountId !== currentAccountId.value)
       return
@@ -1037,7 +1052,7 @@ async function saveAutomationSettings() {
       showAlert('自动控制设置已保存', 'primary')
 
       // 如果启用了自动购买化肥，立即检测并购买
-      if (payload.automation.fertilizer_buy_organic || payload.automation.fertilizer_buy_normal) {
+      if (!inRanch.value && (payload.automation.fertilizer_buy_organic || payload.automation.fertilizer_buy_normal)) {
         try {
           const buyRes = await api.post('/api/fertilizer/check-and-buy', {
             buyOrganic: payload.automation.fertilizer_buy_organic,
@@ -1676,7 +1691,7 @@ async function handleResetSystemConfig() {
         </div>
 
         <!-- 策略设置 -->
-        <div v-else-if="activeTab === 'strategy'" class="space-y-4">
+        <div v-else-if="activeTab === 'strategy' && !inRanch" class="space-y-4">
           <div class="flex items-center justify-between">
             <h3 class="flex items-center gap-2 text-lg text-gray-900 font-bold dark:text-gray-100">
               <div class="i-fas-cog text-lg" />
@@ -1901,12 +1916,14 @@ async function handleResetSystemConfig() {
                   label="种植延迟 (秒)"
                   type="number"
                   min="0"
+                  max="60"
                 />
                 <BaseInput
                   v-model.number="localStrategySettings.stealDelaySeconds"
                   label="偷菜延迟 (秒)"
                   type="number"
                   min="0"
+                  max="300"
                 />
               </div>
             </div>
@@ -1922,6 +1939,29 @@ async function handleResetSystemConfig() {
               </BaseButton>
             </div>
           </div>
+        </div>
+
+        <div v-else-if="activeTab === 'strategy' && inRanch" class="space-y-4">
+          <h3 class="text-lg font-bold">
+            养殖策略
+          </h3>
+          <p v-if="settingsLoading">
+            加载中...
+          </p>
+          <p v-else-if="!currentAccountId || loadedAccountId !== currentAccountId">
+            请先选择并加载账号
+          </p>
+          <AutomationSettingsForm
+            v-else
+            v-model="localAutomationSettings"
+            in-ranch
+            panel="strategy"
+            :ranch-animal-options="ranchAnimalOptions"
+            :saving="automationSaving"
+            :fertilizer-land-type-options="fertilizerLandTypeOptions"
+            :fertilizer-options="fertilizerOptions"
+            @save="saveAutomationSettings"
+          />
         </div>
 
         <!-- 自动控制 -->
@@ -1949,6 +1989,8 @@ async function handleResetSystemConfig() {
             v-else
             v-model="localAutomationSettings"
             :saving="automationSaving"
+            :in-ranch="inRanch"
+            :ranch-animal-options="ranchAnimalOptions"
             :fertilizer-land-type-options="fertilizerLandTypeOptions"
             :fertilizer-options="fertilizerOptions"
             @save="saveAutomationSettings"

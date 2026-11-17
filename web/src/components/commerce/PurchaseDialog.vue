@@ -2,11 +2,13 @@
 import type { MallGoodsDto } from '@/stores/commerce'
 import { NButton } from 'naive-ui/es/button'
 import { computed, ref, watch } from 'vue'
+import { purchaseMaxCount } from '@/utils/purchase-count'
 import CommerceItemImage from './CommerceItemImage.vue'
 
 const props = defineProps<{
   open: boolean
   goods: MallGoodsDto | null
+  limitLabel?: string
   pending?: boolean
 }>()
 
@@ -16,7 +18,10 @@ const emit = defineEmits<{
 }>()
 
 const count = ref(1)
-const maxCount = computed(() => Math.max(1, Math.min(9999, props.goods?.limit?.remaining ?? 9999)))
+const maxCount = computed(() => purchaseMaxCount({
+  limitRemaining: props.goods?.limit?.remaining ?? null,
+  costs: props.goods?.isFree ? [] : [{ id: props.goods?.price?.id, count: props.goods?.price?.count, balance: props.goods?.price?.balance }],
+}))
 const totalCost = computed(() => (props.goods?.price.count || 0) * count.value)
 const balanceUnknown = computed(() => !props.goods?.isFree && props.goods?.price.balance == null)
 const insufficient = computed(() => {
@@ -72,7 +77,7 @@ function setCount(value: number) {
         <div class="purchase-row">
           <div>
             <span class="purchase-row__label">购买数量</span>
-            <small v-if="goods.limit">还可购买 {{ maxCount }} 份</small>
+            <small v-if="goods.limit">{{ limitLabel || '限购' }} · 还可购买 {{ maxCount }} 份</small>
           </div>
           <div class="stepper">
             <button type="button" title="减少" aria-label="减少" :disabled="pending || count <= 1" @click="setCount(count - 1)">
