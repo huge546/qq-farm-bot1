@@ -114,5 +114,9 @@ export const ranchMenuRoutes: MenuItem[] = [
 
 export const allMenuRoutes = [...menuRoutes, ...ranchMenuRoutes]
 export function getSpaceMenu(inRanch: boolean) {
-  return inRanch ? ranchMenuRoutes : menuRoutes
+  if (!inRanch)
+    return menuRoutes
+  // 牧场空间也要保留管理员专属入口（卡密管理 / 用户管理）
+  const adminOnlyItems = menuRoutes.filter(item => item.meta?.roles?.includes('admin'))
+  return [...ranchMenuRoutes, ...adminOnlyItems]
 }
