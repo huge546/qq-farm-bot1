@@ -8,6 +8,7 @@
 | --- | --- |
 | `download-game-config.js` | 从微信小程序 CDN 定位、下载并校验游戏 JSON 配置 |
 | `download-game-images.js` | 根据游戏配置和 Cocos manifest 下载准确的 PNG 资源 |
+| `har-to-frames.js` | 把 ProxyPin / Chrome DevTools 导出的 HAR 拆成可解码的 WebSocket 帧文件 |
 | `decode-latest-protocols.js` | 解码选定的 WebSocket 抓包并保留未知 protobuf 字段 |
 | `analyze-keepalive-capture.js` | 只输出非敏感的版本、心跳和 Gateway Token 形态统计 |
 | `decode-shop-protocols.js` | 解码神秘商人、商城列表、购买响应及相关通知 |
@@ -170,6 +171,35 @@ node tools/download-game-images.js --help
 ```bash
 pnpm install
 pnpm build:core
+```
+
+### HAR 拆帧（ProxyPin / DevTools）
+
+`decode-latest-protocols.js` 读取的是一帧一个的 `.bin`，而抓包工具导出的是 HAR。先用 `har-to-frames.js` 转换：
+
+```bash
+node tools/har-to-frames.js <capture.har> [输出目录]
+```
+
+默认输出到 HAR 同级的 `frames/` 目录，文件名按时间顺序为 `ws_000001.bin`、`ws_000002.bin`……
+
+可用选项：
+
+- `--prefix <前缀>`：自定义文件名前缀，默认 `ws_`
+- `--connection <序号>`：只导出第 N 个 WebSocket 连接（从 0 开始）；不传则合并全部连接
+
+脚本会按 `opcode` 区分二进制与文本帧，并对首字节不是 `0x0A` 的帧给出警告——游戏业务帧的 `gamepb.Message` 字段 1 是 `Meta`，wire type 为 2，首字节固定为 `0x0A`。
+
+抓包前置要求：
+
+1. 抓包工具需开启 WebSocket 抓帧，否则 HAR 中只有握手没有消息；
+2. 只保留 `gate-obt.nqf.qq.com` 的流量，避免 HAR 过大；
+3. 导出的 HAR 可能含账号凭据，落盘和提交前先脱敏。
+
+转换后即可直接解码：
+
+```bash
+pnpm -C core exec tsx ../tools/decode-latest-protocols.js ./frames gamepb.activitypb.ActivityService.List
 ```
 
 ### 通用协议解码
