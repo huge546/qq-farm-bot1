@@ -33,12 +33,14 @@ RUN --mount=type=cache,id=qq-farm-pnpm-store,target=/pnpm/store,sharing=locked \
 FROM workspace-deps AS web-builder
 
 COPY web ./web
-RUN pnpm -C web build
+# 低配机器（1G 内存）上 Vite/Rollup 默认堆上限会直接 OOM，
+# 显式抬高堆上限并依赖 swap 完成构建。
+RUN NODE_OPTIONS=--max-old-space-size=1536 pnpm -C web build
 
 FROM workspace-deps AS core-builder
 
 COPY core ./core
-RUN pnpm -C core build:ts
+RUN NODE_OPTIONS=--max-old-space-size=1536 pnpm -C core build:ts
 
 # Production dependencies have their own cached stage and are unaffected by
 # application source changes.
