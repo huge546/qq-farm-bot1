@@ -47,6 +47,8 @@ export interface AutomationConfig {
   fertilizer_multi_season?: boolean
   fertilizer_land_types?: string[]
   fertilizer_smart_seconds?: number
+  /** 以薯换福：到点后才开始卖薯（"HH:MM"，空串=不限）。 */
+  yishu_sell_after_time?: string
   friend_steal?: boolean
   friend_help?: boolean
   friend_bad?: boolean
