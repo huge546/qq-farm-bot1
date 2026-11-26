@@ -399,8 +399,6 @@ message ActivityData {
     ActivityBodyGrowthFund growth_fund = 122;
     ActivityBodyWishSign wish_sign = 119;
     ActivityBodyShareReward share_reward = 120;
-    // 以薯换福（2026111708，type 26）：状态消息位于 field 130。
-    YiShuHuanFuState yishu_huanfu = 130;
     ActivityContent activity = 1;
     repeated ActivityData children = 2;
     YshfState yishuhuanfu = 130;
@@ -806,108 +804,4 @@ message WeatherResearchOperateResult {
 
 message ActiviesChangeNotify {
     repeated ActivityContent activities = 1;
-}
-
-// ---------------------------------------------------------------------------
-// 以薯换福（20261125）
-//
-// 抓包依据：docs/yishu-huanfu-20261125.md
-//   分组 2026111707，主玩法 2026111708（type 26），任务位 2026111709（type 6）。
-//   状态消息 field 130，操作 operate_type 93 = 卖出蜜薯，载荷落在 field 193。
-//   蜜薯 = 道具 1032，福气币 = 道具 1033（走 ItemNotify，不在本消息内）。
-// 未确认字段一律保留 field_N 命名，避免把推测当结论。
-// ---------------------------------------------------------------------------
-
-message YiShuHuanFuHead {
-    int64 id = 1;
-    int64 group_id = 2;
-    int64 type = 3;
-    string name = 4;
-    bytes extra = 5;
-    int64 start_time = 6;
-    int64 end_time = 7;
-    int64 sort_order = 8;
-    int64 field_20 = 20;
-    int64 field_23 = 23;
-    int64 settle_start_time = 24;
-}
-
-message YiShuHuanFuFlags {
-    int64 field_1 = 1;
-    int64 field_2 = 2;
-    int64 field_3 = 3;
-}
-
-message YiShuHuanFuShop {
-    // 抓包实测 297 / 9 / 刷新时间 / 1；语义未逐一确认。
-    int64 field_1 = 1;
-    int64 field_2 = 2;
-    int64 refresh_time = 3;
-    int64 field_4 = 4;
-}
-
-message YiShuHuanFuState {
-    YiShuHuanFuFlags daily = 1;
-    YiShuHuanFuShop shop = 2;
-    // 卖出 1 个蜜薯后为 445，与福气币余额同值，判定为余额镜像。
-    int64 luck_coin_balance = 3;
-    YiShuHuanFuFlags flags = 4;
-    // f5 = 当日「分享暴击」加成值。实机成交价 = shop.f1 + f5
-    // （2026-11-25：297 + 148 = 445；2026-11-26：66 + 162 = 228，均与 op93 回包单价一致）。
-    int64 field_5 = 5;
-    // f6 = 当日基础收购价镜像，等于 shop.f1。
-    int64 field_6 = 6;
-    // f7 = 活动累计计数，跨天不清零（抓包 30067，次日 14074）。
-    int64 field_7 = 7;
-    // f8 = 上一结算周期结转的蜜薯数（2026-11-25 为 659），不是当前背包库存；
-    // 当前蜜薯数量读道具 1032。
-    int64 field_8 = 8;
-    // f9 = 福气币余额的结算前快照（余额 - 最近一次结算入账）。
-    int64 field_9 = 9;
-}
-
-message YiShuHuanFuMain {
-    YiShuHuanFuHead head = 1;
-    YiShuHuanFuState state = 130;
-}
-
-message YiShuHuanFuTask {
-    YiShuHuanFuHead head = 1;
-    bytes tasks = 117;
-}
-
-message YiShuHuanFuGroup {
-    YiShuHuanFuHead head = 1;
-    repeated YiShuHuanFuMain children = 2;
-}
-
-message YiShuHuanFuListReply {
-    repeated YiShuHuanFuGroup groups = 1;
-}
-
-message YiShuHuanFuSellParams {
-    // 实机为 {1: gid, 2: count}，由解密后的客户端请求确认（抓包 ws_000635，op93）。
-    int64 gid = 1;
-    int64 count = 2;
-}
-
-message YiShuHuanFuSellRequest {
-    int64 activity_id = 1;
-    int64 operate_type = 2;
-    YiShuHuanFuSellParams params = 193;
-}
-
-message YiShuHuanFuSellResult {
-    int64 count = 1;
-    int64 unit_price = 2;
-    int64 total = 3;
-    int64 daily_limit = 4;
-    int64 luck_coin_balance = 5;
-}
-
-message YiShuHuanFuOperateReply {
-    int64 activity_id = 1;
-    int64 operate_type = 2;
-    YiShuHuanFuMain data = 3;
-    YiShuHuanFuSellResult result = 193;
 }

@@ -21,6 +21,7 @@ import QingMeiActivityPage from './activity-center/QingMeiActivityPage.vue'
 import QixiActivityPage from './activity-center/QixiActivityPage.vue'
 import StellarActivityPage from './activity-center/StellarActivityPage.vue'
 import WeatherActivityPage from './activity-center/WeatherActivityPage.vue'
+import YishuHuanfuActivityPanel from '@/components/activity/YishuHuanfuActivityPanel.vue'
 
 const props = withDefaults(defineProps<{ space?: 'farm' | 'ranch' }>(), { space: 'farm' })
 const router = useRouter()
@@ -155,6 +156,7 @@ onUnmounted(() => {
     @back="goBack"
   />
   <PetDiaryPage v-else-if="selectedActivity === 'pet'" @back="goBack" />
+  <YishuHuanfuActivityPanel v-else-if="selectedActivity === 'yishuhuanfu'" @back="goBack" />
 </template>
 
 <style>

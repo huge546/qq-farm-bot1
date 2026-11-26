@@ -18,6 +18,7 @@ const gameplayModules: Record<ActivityGameplayKey, ActivityGameplayModule> = {
   qingmei: qingMeiGameplay,
   charity: charityGameplay,
   weather: weatherGameplay,
+  yishuhuanfu: { key: 'yishuhuanfu', defaultTab: 'yishuhuanfu', tabs: ['yishuhuanfu'] },
 }
 
 function inferGameplayKey(activity: ActivityDirectoryItemDto): ActivityGameplayKey | null {
@@ -35,6 +36,8 @@ function inferGameplayKey(activity: ActivityDirectoryItemDto): ActivityGameplayK
     return 'qixi'
   if (activity.detailTarget === 'qingmei')
     return 'qingmei'
+  if (activity.detailTarget === 'yishuhuanfu')
+    return 'yishuhuanfu'
   if (activity.detailTarget)
     return 'stellar'
 
@@ -49,6 +52,8 @@ function inferGameplayKey(activity: ActivityDirectoryItemDto): ActivityGameplayK
     return 'qingmei'
   if (['2026090900', '2026090901'].some(id => activityIds.has(id)))
     return 'charity'
+  if (['2026111707', '2026111708', '2026111709'].some(id => activityIds.has(id)))
+    return 'yishuhuanfu'
 
   const name = activity.name.trim()
   if (name.includes('雨落成诗'))
@@ -59,6 +64,8 @@ function inferGameplayKey(activity: ActivityDirectoryItemDto): ActivityGameplayK
     return 'qingmei'
   if (name.includes('公益小红花'))
     return 'charity'
+  if (name.includes('以薯换福'))
+    return 'yishuhuanfu'
   if (/千星|星砂|星宿|节令/.test(name))
     return 'stellar'
   return null

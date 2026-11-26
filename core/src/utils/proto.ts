@@ -72,15 +72,6 @@ async function loadProto(): Promise<void> {
         types[name] = root.lookupType(`gamepb.activitypb.${name}`);
     }
 
-    // 以薯换福（20261125）：分组 2026111707 / 主玩法 2026111708
-    for (const name of [
-        'YiShuHuanFuListReply',
-        'YiShuHuanFuSellRequest',
-        'YiShuHuanFuOperateReply',
-    ]) {
-        types[name] = root.lookupType(`gamepb.activitypb.${name}`);
-    }
-
     types.MilkTeaOperateReply = root.lookupType('gamepb.activitypb.MilkTeaOperateReply');
     types.MilkTeaGetGroupReply = root.lookupType('gamepb.activitypb.MilkTeaGetGroupReply');
     types.MilkTeaOperateRequest = root.lookupType('gamepb.activitypb.MilkTeaOperateRequest');

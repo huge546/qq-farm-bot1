@@ -242,19 +242,6 @@ function createDataProvider(options: DataProviderOptions) {
         ),
         getMugeActivity: (accountRef: string) => callWorkerApi(resolveAccountRefId(accountRef), 'getMugeActivity'),
         operateMugeActivity: (accountRef: string, action: string, input: any) => callWorkerApi(resolveAccountRefId(accountRef), 'operateMugeActivity', action, input),
-        getYiShuHuanFuActivity: (accountRef: string) => callWorkerApi(resolveAccountRefId(accountRef), 'getYiShuHuanFuActivity'),
-        sellYishuHuanFuSweetPotato: (accountRef: string, count: unknown) => (
-            callWorkerApi(resolveAccountRefId(accountRef), 'sellYishuHuanFuSweetPotato', count)
-        ),
-        probeYiShuHuanFu: (accountRef: string, operateType: unknown, payloadHex?: unknown, payloadField?: unknown) => (
-            callWorkerApi(resolveAccountRefId(accountRef), 'probeYiShuHuanFu', operateType, payloadHex, payloadField)
-        ),
-        sellAllYiShuHuanFuSweetPotato: (accountRef: string) => (
-            callWorkerApi(resolveAccountRefId(accountRef), 'sellAllYiShuHuanFuSweetPotato')
-        ),
-        refreshYiShuHuanFuShop: (accountRef: string) => (
-            callWorkerApi(resolveAccountRefId(accountRef), 'refreshYiShuHuanFuShop')
-        ),
         getMilkTeaActivity: (accountRef: string, page: string, input: any) => callWorkerApi(resolveAccountRefId(accountRef), 'getMilkTeaActivity', page, input),
         operateMilkTeaActivity: (accountRef: string, action: string, input: any) => callWorkerApi(resolveAccountRefId(accountRef), 'operateMilkTeaActivity', action, input),
         getShareRewardActivity: (accountRef: string, activityId: string) => callWorkerApi(resolveAccountRefId(accountRef), 'getShareRewardActivity', activityId),
