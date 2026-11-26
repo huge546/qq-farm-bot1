@@ -13,15 +13,17 @@ export {};
  * operate_type 尚未确认，确认前不写入自动流程。
  */
 
-const { sendMsgAsync } = require('../utils/network');
+const { sendMsgAsync, getUserState } = require('../utils/network');
 const { types } = require('../utils/proto');
 const { getServerTimeSec, toNum } = require('../utils/utils');
 const { Reader } = require('protobufjs');
+const { getBag, getBagItems } = require('./warehouse');
 
 const GROUP_ID = '2026111707';
 const MAIN_ID = '2026111708';
 const TASK_ID = '2026111709';
 const SELL_OPERATE_TYPE = 93;
+const REFRESH_OPERATE_TYPE = 98;
 const ITEM_ID_SWEET_POTATO = 1032;
 const ITEM_ID_LUCK_COIN = 1033;
 const MAX_SELL_COUNT = 100000;
@@ -46,14 +48,18 @@ function parseRules(extra: unknown): string[] {
 
 function stateDto(state: any): any {
     if (!state) return null;
+    const basePrice = toNum(state.shop?.field_1);
+    const bonus = toNum(state.field_5);
     return {
-        // 445 = 福气币余额镜像，与道具 1033 实测一致。
+        // 福气币余额镜像，与道具 1033 实测一致。
         luckCoinBalance: toNum(state.luck_coin_balance),
         shop: state.shop ? {
-            price: toNum(state.shop.field_1),
+            price: basePrice,
             tier: toNum(state.shop.field_2),
             refreshTime: toNum(state.shop.refresh_time) * 1000,
             status: toNum(state.shop.field_4),
+            // 实机成交单价 = 基础价 + 分享暴击加成。
+            finalPrice: basePrice + bonus,
         } : null,
         daily: state.daily ? {
             field_1: toNum(state.daily.field_1),
@@ -65,9 +71,11 @@ function stateDto(state: any): any {
             field_2: toNum(state.flags.field_2),
             field_3: toNum(state.flags.field_3),
         } : null,
-        field_5: toNum(state.field_5),
+        field_5: bonus,
         field_6: toNum(state.field_6),
         field_7: toNum(state.field_7),
+        field_8: toNum(state.field_8),
+        field_9: toNum(state.field_9),
     };
 }
 
@@ -109,10 +117,12 @@ async function getYiShuHuanFuActivity() {
 async function performSell(count: number) {
     const activity = await getYiShuHuanFuActivity();
     if (!activity.active) fail('YISHU_ENDED', '以薯换福尚未开始或已经结束');
+    const gid = resolveSelfGid();
     const body = types.YiShuHuanFuSellRequest.encode({
         activity_id: MAIN_ID,
         operate_type: SELL_OPERATE_TYPE,
-        params: { count },
+        // 实机结构为 {1: gid, 2: count}，缺 gid 会被服务端拒绝为 1034005。
+        params: { gid, count },
     }).finish();
     const response = await sendMsgAsync('gamepb.activitypb.ActivityService', 'Operate', body);
     const reply = types.YiShuHuanFuOperateReply.decode(response.body);
@@ -129,6 +139,24 @@ async function performSell(count: number) {
     return { result, state: stateDto(reply.data?.state), activity };
 }
 
+function resolveSelfGid(): string {
+    const raw = getUserState()?.gid;
+    const gid = raw === undefined || raw === null ? '' : String(raw).trim();
+    if (!gid || gid === '0') fail('YISHU_ACCOUNT_UNAVAILABLE', '账号尚未登录，无法确定 gid');
+    return gid;
+}
+
+/** 读取背包中蜜薯（道具 1032）的可用数量。 */
+async function readSweetPotatoCount(): Promise<number> {
+    const bag = await getBag({ fresh: true });
+    let total = 0;
+    for (const item of getBagItems(bag)) {
+        if (toNum(item?.id) !== ITEM_ID_SWEET_POTATO) continue;
+        total += toNum(item?.count);
+    }
+    return total;
+}
+
 function sellYishuHuanFuSweetPotato(rawCount: unknown) {
     const count = Math.floor(Number(rawCount));
     if (!Number.isFinite(count) || count <= 0) fail('INVALID_SELL_COUNT', '卖出数量必须是正整数');
@@ -136,6 +164,33 @@ function sellYishuHuanFuSweetPotato(rawCount: unknown) {
     const pending = mutationTail.then(() => performSell(count));
     mutationTail = pending.catch(() => {});
     return pending;
+}
+
+/** 卖出背包里全部蜜薯。 */
+function sellAllYiShuHuanFuSweetPotato() {
+    const pending = mutationTail.then(async () => {
+        const available = await readSweetPotatoCount();
+        if (available <= 0) fail('YISHU_NO_SWEET_POTATO', '背包里没有蜜薯');
+        return performSell(available);
+    });
+    mutationTail = pending.catch(() => {});
+    return pending;
+}
+
+/** 刷新当日收购价（operate_type 98）。跨天后必须调用一次，否则 shop.price 为 0。 */
+async function refreshYiShuHuanFuShop() {
+    const activity = await getYiShuHuanFuActivity();
+    if (!activity.active) fail('YISHU_ENDED', '以薯换福尚未开始或已经结束');
+    const bytes: number[] = [];
+    bytes.push(...encodeTag(1, 0), ...encodeVarint(Number(MAIN_ID)));
+    bytes.push(...encodeTag(2, 0), ...encodeVarint(REFRESH_OPERATE_TYPE));
+    const body = Buffer.from(bytes);
+    const response = await sendMsgAsync('gamepb.activitypb.ActivityService', 'Operate', body);
+    const reply = types.YiShuHuanFuOperateReply.decode(response.body);
+    return {
+        state: stateDto(reply.data?.state),
+        activity: await getYiShuHuanFuActivity(),
+    };
 }
 
 function encodeVarint(value: number): number[] {
@@ -243,5 +298,7 @@ async function probeYiShuHuanFu(rawOperateType: unknown, payloadHex?: unknown, p
 module.exports = {
     getYiShuHuanFuActivity,
     sellYishuHuanFuSweetPotato,
+    sellAllYiShuHuanFuSweetPotato,
+    refreshYiShuHuanFuShop,
     probeYiShuHuanFu,
 };

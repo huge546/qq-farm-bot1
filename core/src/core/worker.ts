@@ -1218,6 +1218,12 @@ async function handleApiCall(msg: any): Promise<void> {
                 case 'sellYishuHuanFuSweetPotato':
                     result = await require('../services/yishu-huanfu').sellYishuHuanFuSweetPotato(args[0]);
                     break;
+                case 'sellAllYiShuHuanFuSweetPotato':
+                    result = await require('../services/yishu-huanfu').sellAllYiShuHuanFuSweetPotato();
+                    break;
+                case 'refreshYiShuHuanFuShop':
+                    result = await require('../services/yishu-huanfu').refreshYiShuHuanFuShop();
+                    break;
                 case 'probeYiShuHuanFu':
                     result = await require('../services/yishu-huanfu').probeYiShuHuanFu(args[0], args[1], args[2]);
                     break;

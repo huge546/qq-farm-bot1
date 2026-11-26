@@ -571,10 +571,18 @@ message YiShuHuanFuState {
     // 卖出 1 个蜜薯后为 445，与福气币余额同值，判定为余额镜像。
     int64 luck_coin_balance = 3;
     YiShuHuanFuFlags flags = 4;
-    // 148 / 297 / 30067：不是蜜薯数量，也不是福气币余额，语义待定。
+    // f5 = 当日「分享暴击」加成值。实机成交价 = shop.f1 + f5
+    // （2026-11-25：297 + 148 = 445；2026-11-26：66 + 162 = 228，均与 op93 回包单价一致）。
     int64 field_5 = 5;
+    // f6 = 当日基础收购价镜像，等于 shop.f1。
     int64 field_6 = 6;
+    // f7 = 活动累计计数，跨天不清零（抓包 30067，次日 14074）。
     int64 field_7 = 7;
+    // f8 = 上一结算周期结转的蜜薯数（2026-11-25 为 659），不是当前背包库存；
+    // 当前蜜薯数量读道具 1032。
+    int64 field_8 = 8;
+    // f9 = 福气币余额的结算前快照（余额 - 最近一次结算入账）。
+    int64 field_9 = 9;
 }
 
 message YiShuHuanFuMain {
@@ -597,7 +605,9 @@ message YiShuHuanFuListReply {
 }
 
 message YiShuHuanFuSellParams {
-    int64 count = 1;
+    // 实机为 {1: gid, 2: count}，由解密后的客户端请求确认（抓包 ws_000635，op93）。
+    int64 gid = 1;
+    int64 count = 2;
 }
 
 message YiShuHuanFuSellRequest {
