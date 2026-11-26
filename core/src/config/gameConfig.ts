@@ -163,6 +163,10 @@ let buffConfig: BuffConfigItem[] | null = null;
 const buffConfigMap = new Map<number, BuffConfigItem>();
 // 作物生长阶段贴图：plant_images/manifest.json，键 Crop_<作物编号> → 阶段 1-6 贴图 URL。
 const plantPhaseImageMap = new Map<number, Map<number, string>>();
+// 官方配置快照未收录的新作物/道具名称别名：gameConfig/ItemAlias.json。
+// 上游停更后协议会先于客户端配置出现新作物（如 1020307 红薯），
+// 缺名字时展示层会退化成「种子40307」这种占位文案，这里给一份可维护的映射。
+const aliasNameMap = new Map<number, string>();
 
 // 官方活动说明确认：变异 13 为鹊羽活动效果，收获时会额外获得鹊羽。
 // 运行时 MutantEffect 暂未下发 tips/description，因此在展示 DTO 层补充说明。
@@ -312,6 +316,24 @@ function loadConfigs(): void {
         console.warn('[配置] 加载 BuffCfg.json 失败:', e.message);
     }
 
+    // 加载新作物/道具名称别名（官方配置快照缺项时兜底）。
+    try {
+        const aliasPath = path.join(configDir, 'ItemAlias.json');
+        aliasNameMap.clear();
+        if (fs.existsSync(aliasPath)) {
+            const aliasConfig = JSON.parse(fs.readFileSync(aliasPath, 'utf8'));
+            for (const [key, value] of Object.entries(aliasConfig || {})) {
+                const id = Number(key);
+                const name = String(value || '').trim();
+                if (!Number.isSafeInteger(id) || id <= 0 || !name) continue;
+                aliasNameMap.set(id, name);
+            }
+            console.warn(`[配置] 已加载名称别名 (${aliasNameMap.size} 项)`);
+        }
+    } catch (e: any) {
+        console.warn('[配置] 加载 ItemAlias.json 失败:', e.message);
+    }
+
     // 加载作物生长阶段贴图清单（官方客户端 Crop_* 阶段贴图，阶段 1-6）。
     try {
         const plantImageManifestPath = path.join(configDir, 'plant_images', 'manifest.json');
@@ -394,14 +416,21 @@ function getPlantBySeedId(seedId: number): PlantItem | undefined {
     return seedToPlant.get(seedId);
 }
 
+/** 查询新作物/道具的名称别名（ItemAlias.json），没有时返回空串。 */
+function getAliasName(id: number): string {
+    return aliasNameMap.get(Number(id) || 0) || '';
+}
+
 function getPlantName(plantId: number): string {
     const plant = plantMap.get(plantId);
-    return plant ? plant.name : `植物${plantId}`;
+    if (plant && plant.name) return plant.name;
+    return getAliasName(plantId) || `植物${plantId}`;
 }
 
 function getPlantNameBySeedId(seedId: number): string {
     const plant = seedToPlant.get(seedId);
-    return plant ? plant.name : `种子${seedId}`;
+    if (plant && plant.name) return plant.name;
+    return getAliasName(seedId) || `种子${seedId}`;
 }
 
 function getPlantGrowTime(plantId: number): number {
@@ -459,7 +488,8 @@ function getPlantExp(plantId: number): number {
 
 function getFruitName(fruitId: number): string {
     const plant = fruitToPlant.get(fruitId);
-    return plant ? plant.name : `果实${fruitId}`;
+    if (plant && plant.name) return plant.name;
+    return getAliasName(fruitId) || `果实${fruitId}`;
 }
 
 function getPlantByFruitId(fruitId: number): PlantItem | undefined {
@@ -801,6 +831,7 @@ module.exports = {
     getPlantBySeedId,
     getPlantName,
     getPlantNameBySeedId,
+    getAliasName,
     getPlantGrowTime,
     getPlantGrowPhases,
     getPlantExp,

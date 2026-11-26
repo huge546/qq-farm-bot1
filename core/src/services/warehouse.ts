@@ -5,7 +5,7 @@ export {};
  * 仓库系统 - 自动出售果实
  * 协议说明：BagReply 使用 item_bag（ItemBag），item_bag.items 才是背包物品列表
  */
-const { getFruitName, getPlantByFruitId, getPlantBySeedId, getItemById, getItemImageById, getSeedImageBySeedId, getEffectiveSellInfo, getMutantEffectsByIds } = require('../config/gameConfig');
+const { getFruitName, getPlantByFruitId, getPlantBySeedId, getItemById, getItemImageById, getSeedImageBySeedId, getEffectiveSellInfo, getMutantEffectsByIds, getAliasName } = require('../config/gameConfig');
 const { isAutomationOn } = require('../models/store');
 const { sendMsgAsync, networkEvents, getUserState } = require('../utils/network');
 const { types } = require('../utils/proto');
@@ -579,7 +579,7 @@ async function getBagDetail(): Promise<any> {
             category = 'fruit';
         } else if (itemType === 5 || getPlantBySeedId(id)) {
             const p: any = getPlantBySeedId(id);
-            if (!name) name = `${p && p.name ? p.name : '未知'}种子`;
+            if (!name) name = `${p && p.name ? p.name : (getAliasName(id) || '未知')}种子`;
             category = 'seed';
         }
         if (!name) name = `物品${id}`;
