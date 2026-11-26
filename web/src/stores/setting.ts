@@ -47,6 +47,22 @@ export interface AutomationConfig {
   fertilizer_multi_season?: boolean
   fertilizer_land_types?: string[]
   fertilizer_smart_seconds?: number
+  /** 以薯换福：每日领红薯种子（op91）。 */
+  yishu_claim_seed?: boolean
+  /** 以薯换福：每日分享触发暴击涨价（op98）。 */
+  yishu_share?: boolean
+  /** 以薯换福：自动卖蜜薯（op93，含跨账号比价）。 */
+  yishu_auto_sell?: boolean
+  /** 以薯换福：领收购提成（op99）。 */
+  yishu_claim_commission?: boolean
+  /** 以薯换福：好友铺子都收满时卖给自己。 */
+  yishu_sell_fallback_own?: boolean
+  /** 以薯换福：比价好友上限（默认 60，最大 200）。 */
+  yishu_scan_friend_limit?: number
+  /** 以薯换福：比价间隔（分钟，默认 120）。 */
+  yishu_scan_interval_minutes?: number
+  /** 以薯换福：背包蜜薯低于该数量不卖。 */
+  yishu_sell_min_count?: number
   /** 以薯换福：到点后才开始卖薯（"HH:MM"，空串=不限）。 */
   yishu_sell_after_time?: string
   friend_steal?: boolean

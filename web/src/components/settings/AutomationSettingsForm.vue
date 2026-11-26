@@ -226,6 +226,53 @@ const ranchFeedNormalStages = [
 
         <section class="farm-card rounded-2xl p-4">
           <div class="mb-4 flex items-start gap-3">
+            <div class="h-9 w-9 flex shrink-0 items-center justify-center rounded-lg bg-orange-50 text-orange-600 dark:bg-orange-900/25 dark:text-orange-400">
+              <span class="i-carbon-sprout text-xl" />
+            </div>
+            <div>
+              <h4 class="text-base text-gray-900 font-bold dark:text-gray-100">
+                以薯换福
+              </h4>
+              <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                领种子、分享暴击、跨账号比价卖蜜薯与收购提成
+              </p>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <div class="automation-setting-item">
+              <BaseSwitch v-model="settings.automation.yishu_claim_seed" class="automation-setting-item" label="每日领红薯种子" />
+            </div>
+            <div class="automation-setting-item">
+              <BaseSwitch v-model="settings.automation.yishu_share" class="automation-setting-item" label="每日分享（暴击涨价）" />
+            </div>
+            <div class="automation-setting-item">
+              <BaseSwitch v-model="settings.automation.yishu_auto_sell" class="automation-setting-item" label="自动卖蜜薯" />
+            </div>
+            <div class="automation-setting-item">
+              <BaseSwitch v-model="settings.automation.yishu_claim_commission" class="automation-setting-item" label="自动领收购提成" />
+            </div>
+          </div>
+
+          <div
+            v-if="settings.automation.yishu_auto_sell"
+            class="mt-3 rounded-lg bg-orange-50 p-3 text-sm space-y-3 dark:bg-orange-900/20"
+          >
+            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <BaseInput v-model.number="settings.automation.yishu_scan_friend_limit" label="比价好友上限" type="number" min="1" max="200" />
+              <BaseInput v-model.number="settings.automation.yishu_scan_interval_minutes" label="比价间隔 (分钟)" type="number" min="10" max="1440" />
+              <BaseInput v-model.number="settings.automation.yishu_sell_min_count" label="少于该数量不卖" type="number" min="0" max="99999" />
+              <BaseInput v-model="settings.automation.yishu_sell_after_time" label="开始卖出时间 (HH:MM)" placeholder="空 = 不限时间" />
+            </div>
+            <BaseSwitch v-model="settings.automation.yishu_sell_fallback_own" label="好友铺子都收满时卖给自己" />
+            <p class="text-xs text-gray-500 dark:text-gray-400">
+              每 10 分钟读一次活动状态，到比价间隔才扫好友铺子。成交价 = 基础价 + 分享暴击加成。
+            </p>
+          </div>
+        </section>
+
+        <section class="farm-card rounded-2xl p-4">
+          <div class="mb-4 flex items-start gap-3">
             <div class="h-9 w-9 flex shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-600 dark:bg-amber-900/25 dark:text-amber-400">
               <span class="i-carbon-chemistry text-xl" />
             </div>
