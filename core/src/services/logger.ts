@@ -142,11 +142,19 @@ function getRootLogger(): any {
             new winston.transports.File({
                 filename: path.join(logDir, 'combined.log'),
                 format: combine(timestamp(), errors({ stack: true }), json()),
+                // 没有轮转时这个文件只增不减，跑一个月就是几百 MB。
+                // 30MB x 3 封顶，超了就滚动。
+                maxsize: 30 * 1024 * 1024,
+                maxFiles: 3,
+                tailable: true,
             }),
             new winston.transports.File({
                 filename: path.join(logDir, 'error.log'),
                 level: 'error',
                 format: combine(timestamp(), errors({ stack: true }), json()),
+                maxsize: 10 * 1024 * 1024,
+                maxFiles: 2,
+                tailable: true,
             }),
         ],
     });
