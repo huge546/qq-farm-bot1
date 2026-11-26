@@ -246,6 +246,9 @@ function createDataProvider(options: DataProviderOptions) {
         sellYishuHuanFuSweetPotato: (accountRef: string, count: unknown) => (
             callWorkerApi(resolveAccountRefId(accountRef), 'sellYishuHuanFuSweetPotato', count)
         ),
+        probeYiShuHuanFu: (accountRef: string, operateType: unknown, payloadHex?: unknown, payloadField?: unknown) => (
+            callWorkerApi(resolveAccountRefId(accountRef), 'probeYiShuHuanFu', operateType, payloadHex, payloadField)
+        ),
         getMilkTeaActivity: (accountRef: string, page: string, input: any) => callWorkerApi(resolveAccountRefId(accountRef), 'getMilkTeaActivity', page, input),
         operateMilkTeaActivity: (accountRef: string, action: string, input: any) => callWorkerApi(resolveAccountRefId(accountRef), 'operateMilkTeaActivity', action, input),
         getShareRewardActivity: (accountRef: string, activityId: string) => callWorkerApi(resolveAccountRefId(accountRef), 'getShareRewardActivity', activityId),

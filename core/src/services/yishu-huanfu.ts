@@ -16,6 +16,7 @@ export {};
 const { sendMsgAsync } = require('../utils/network');
 const { types } = require('../utils/proto');
 const { getServerTimeSec, toNum } = require('../utils/utils');
+const { Reader } = require('protobufjs');
 
 const GROUP_ID = '2026111707';
 const MAIN_ID = '2026111708';
@@ -137,7 +138,110 @@ function sellYishuHuanFuSweetPotato(rawCount: unknown) {
     return pending;
 }
 
+function encodeVarint(value: number): number[] {
+    const out: number[] = [];
+    let rest = Math.floor(value);
+    while (rest > 0x7f) {
+        out.push((rest & 0x7f) | 0x80);
+        rest = Math.floor(rest / 128);
+    }
+    out.push(rest & 0x7f);
+    return out;
+}
+
+function encodeTag(fieldNo: number, wire: number): number[] {
+    return encodeVarint(fieldNo * 8 + wire);
+}
+
+/**
+ * 把任意 protobuf 字节尽力还原成「字段 -> 值」结构，用于破解未确认的 operate 回包。
+ * 解析失败不影响调用方，原始 base64 一并返回。
+ */
+function dumpProto(buffer: Buffer, depth = 0): any {
+    if (depth > 4) return { hex: buffer.toString('hex') };
+    const reader = Reader.create(buffer);
+    const fields: any[] = [];
+    try {
+        while (reader.pos < reader.len) {
+            const tag = reader.uint32();
+            const no = tag >>> 3;
+            const wire = tag & 7;
+            if (no === 0 || no > 4096) throw new Error(`bad field ${no}`);
+            const entry: any = { no, wire };
+            if (wire === 0) {
+                entry.value = String(reader.uint64());
+            } else if (wire === 1) {
+                entry.value = String(reader.uint64());
+            } else if (wire === 2) {
+                const raw = reader.bytes();
+                const buf = Buffer.from(raw);
+                entry.len = buf.length;
+                if (buf.length > 0 && buf.length <= 160) entry.hex = buf.toString('hex');
+                const nested = buf.length > 1 ? dumpProto(buf, depth + 1) : null;
+                if (Array.isArray(nested) && nested.length > 0) entry.nested = nested;
+                else {
+                    const text = buf.toString('utf8');
+                    if (buf.length > 0 && /^[\x20-\x7e\u4e00-\u9fff]+$/.test(text)) entry.text = text;
+                }
+            } else if (wire === 5) {
+                entry.value = String(reader.float());
+            } else {
+                return { hex: buffer.toString('hex'), note: `unsupported wire ${wire}` };
+            }
+            fields.push(entry);
+        }
+    } catch (error: any) {
+        return { hex: buffer.toString('hex'), error: error?.message || String(error) };
+    }
+    return fields;
+}
+
+/**
+ * 直接发一个 ActivityService.Operate，回包原样 dump。
+ * 只用来确认 operate_type 语义，禁止在自动化流程里调用。
+ */
+async function probeYiShuHuanFu(rawOperateType: unknown, payloadHex?: unknown, payloadFieldNo?: unknown) {
+    const operateType = Math.floor(Number(rawOperateType));
+    if (!Number.isFinite(operateType) || operateType <= 0) fail('INVALID_OPERATE_TYPE', 'operate_type 必须是正整数');
+    const bytes: number[] = [];
+    bytes.push(...encodeTag(1, 0), ...encodeVarint(Number(MAIN_ID)));
+    bytes.push(...encodeTag(2, 0), ...encodeVarint(operateType));
+    const hex = typeof payloadHex === 'string' ? payloadHex.trim() : '';
+    if (hex) {
+        if (!/^([0-9a-fA-F]{2})+$/.test(hex)) fail('INVALID_PAYLOAD', 'payloadHex 必须是偶数长度的十六进制串');
+        const payload = Buffer.from(hex, 'hex');
+        const fieldNo = Number(payloadFieldNo) || (100 + operateType);
+        bytes.push(...encodeTag(fieldNo, 2), ...encodeVarint(payload.length), ...payload);
+    }
+    const body = Buffer.from(bytes);
+    const response = await sendMsgAsync('gamepb.activitypb.ActivityService', 'Operate', body);
+    const reply = types.YiShuHuanFuOperateReply.decode(response.body);
+    return {
+        request: {
+            activityId: MAIN_ID,
+            operateType,
+            payloadField: hex ? (Number(payloadFieldNo) || (100 + operateType)) : null,
+            payloadHex: hex || null,
+        },
+        reply: {
+            activityId: String(reply.activity_id || ''),
+            operateType: toNum(reply.operate_type),
+            state: stateDto(reply.data?.state),
+            sellResult: reply.result ? {
+                count: toNum(reply.result.count),
+                unitPrice: toNum(reply.result.unit_price),
+                total: toNum(reply.result.total),
+                dailyLimit: toNum(reply.result.daily_limit),
+                luckCoinBalance: toNum(reply.result.luck_coin_balance),
+            } : null,
+            rawBase64: Buffer.from(response.body).toString('base64'),
+            dump: dumpProto(Buffer.from(response.body)),
+        },
+    };
+}
+
 module.exports = {
     getYiShuHuanFuActivity,
     sellYishuHuanFuSweetPotato,
+    probeYiShuHuanFu,
 };

@@ -12,4 +12,8 @@ export function mountYiShuHuanFuRoutes({ app, ctx, withAccount, mountGet }: Acti
     app.post('/api/activity-center/yishu-huanfu/sell', withAccount((accountId: string, req: Request) => (
         ctx.provider.sellYishuHuanFuSweetPotato(accountId, req.body?.count)
     )));
+    // 仅用于确认 operate_type 语义（临时调试口，确认后可移除）。
+    app.post('/api/activity-center/yishu-huanfu/probe', withAccount((accountId: string, req: Request) => (
+        ctx.provider.probeYiShuHuanFu(accountId, req.body?.operateType, req.body?.payloadHex, req.body?.payloadField)
+    )));
 }

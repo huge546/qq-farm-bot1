@@ -1218,6 +1218,9 @@ async function handleApiCall(msg: any): Promise<void> {
                 case 'sellYishuHuanFuSweetPotato':
                     result = await require('../services/yishu-huanfu').sellYishuHuanFuSweetPotato(args[0]);
                     break;
+                case 'probeYiShuHuanFu':
+                    result = await require('../services/yishu-huanfu').probeYiShuHuanFu(args[0], args[1], args[2]);
+                    break;
                 case 'getMilkTeaActivity':
                     result = await require('../services/milk-tea').getMilkTeaActivity(args[0], args[1]);
                     break;
