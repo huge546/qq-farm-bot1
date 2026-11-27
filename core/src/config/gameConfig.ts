@@ -167,6 +167,9 @@ const plantPhaseImageMap = new Map<number, Map<number, string>>();
 // 上游停更后协议会先于客户端配置出现新作物（如 1020307 红薯），
 // 缺名字时展示层会退化成「种子40307」这种占位文案，这里给一份可维护的映射。
 const aliasNameMap = new Map<number, string>();
+// 别名条目可带 type（5=种子 / 6=果实 / 17=超变果实），用于官方 ItemInfo 缺项时
+// 让背包分类、出售逻辑走对分支。
+const aliasItemTypeMap = new Map<number, number>();
 
 // 官方活动说明确认：变异 13 为鹊羽活动效果，收获时会额外获得鹊羽。
 // 运行时 MutantEffect 暂未下发 tips/description，因此在展示 DTO 层补充说明。
@@ -320,15 +323,21 @@ function loadConfigs(): void {
     try {
         const aliasPath = path.join(configDir, 'ItemAlias.json');
         aliasNameMap.clear();
+        aliasItemTypeMap.clear();
         if (fs.existsSync(aliasPath)) {
             const aliasConfig = JSON.parse(fs.readFileSync(aliasPath, 'utf8'));
             for (const [key, value] of Object.entries(aliasConfig || {})) {
                 const id = Number(key);
-                const name = String(value || '').trim();
+                const entry: any = value;
+                const name = String(
+                    typeof entry === 'string' ? entry : (entry && entry.name) || '',
+                ).trim();
                 if (!Number.isSafeInteger(id) || id <= 0 || !name) continue;
                 aliasNameMap.set(id, name);
+                const type = Number(entry && typeof entry === 'object' ? entry.type : 0) || 0;
+                if (type > 0) aliasItemTypeMap.set(id, type);
             }
-            console.warn(`[配置] 已加载名称别名 (${aliasNameMap.size} 项)`);
+            console.warn(`[配置] 已加载名称别名 (${aliasNameMap.size} 项，${aliasItemTypeMap.size} 项带类型)`);
         }
     } catch (e: any) {
         console.warn('[配置] 加载 ItemAlias.json 失败:', e.message);
@@ -419,6 +428,11 @@ function getPlantBySeedId(seedId: number): PlantItem | undefined {
 /** 查询新作物/道具的名称别名（ItemAlias.json），没有时返回空串。 */
 function getAliasName(id: number): string {
     return aliasNameMap.get(Number(id) || 0) || '';
+}
+
+/** 别名条目声明的道具类型（ItemInfo 缺项时兜底），没有时返回 0。 */
+function getAliasItemType(id: number): number {
+    return aliasItemTypeMap.get(Number(id) || 0) || 0;
 }
 
 function getPlantName(plantId: number): string {
@@ -832,6 +846,7 @@ module.exports = {
     getPlantName,
     getPlantNameBySeedId,
     getAliasName,
+    getAliasItemType,
     getPlantGrowTime,
     getPlantGrowPhases,
     getPlantExp,

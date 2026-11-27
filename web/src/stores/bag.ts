@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import api, { getApiErrorMessage } from '@/api'
 import { useAccountStore } from '@/stores/account'
+import { applyItemAliasToItems, loadItemAlias } from '@/utils/itemAlias'
 
 export const useBagStore = defineStore('bag', () => {
   const allItems = ref<any[]>([])
@@ -42,9 +43,19 @@ export const useBagStore = defineStore('bag', () => {
         if (curId !== requestedId)
           return
         if (res.data.ok && res.data.data) {
-          allItems.value = Array.isArray(res.data.data.items) ? res.data.data.items : []
+          const alias = await loadItemAlias()
+          const stillId = String((acc.currentAccountId as { value?: string })?.value ?? acc.currentAccountId ?? '')
+          if (stillId !== requestedId)
+            return
+          allItems.value = applyItemAliasToItems(
+            Array.isArray(res.data.data.items) ? res.data.data.items : [],
+            alias,
+          )
           originalItems.value = Array.isArray(res.data.data.originalItems) ? res.data.data.originalItems : []
-          systemItems.value = Array.isArray(res.data.data.systemItems) ? res.data.data.systemItems : []
+          systemItems.value = applyItemAliasToItems(
+            Array.isArray(res.data.data.systemItems) ? res.data.data.systemItems : [],
+            alias,
+          )
         }
         else if (res.data && res.data.ok === false && res.data.error) {
           allItems.value = []

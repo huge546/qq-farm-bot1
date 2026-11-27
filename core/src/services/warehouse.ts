@@ -5,7 +5,7 @@ export {};
  * 仓库系统 - 自动出售果实
  * 协议说明：BagReply 使用 item_bag（ItemBag），item_bag.items 才是背包物品列表
  */
-const { getFruitName, getPlantByFruitId, getPlantBySeedId, getItemById, getItemImageById, getSeedImageBySeedId, getEffectiveSellInfo, getMutantEffectsByIds, getAliasName } = require('../config/gameConfig');
+const { getFruitName, getPlantByFruitId, getPlantBySeedId, getItemById, getItemImageById, getSeedImageBySeedId, getEffectiveSellInfo, getMutantEffectsByIds, getAliasName, getAliasItemType } = require('../config/gameConfig');
 const { isAutomationOn } = require('../models/store');
 const { sendMsgAsync, networkEvents, getUserState } = require('../utils/network');
 const { types } = require('../utils/proto');
@@ -526,7 +526,7 @@ async function getBagDetail(): Promise<any> {
             const hoursText: string = interactionType === 'fertilizerbucket'
                 ? `${(Math.floor((count / 3600) * 10) / 10).toFixed(1)}小时`
                 : '';
-            return { id, count, name: info?.name || `物品${id}`, interactionType, hoursText };
+            return { id, count, name: info?.name || getAliasName(id) || `物品${id}`, interactionType, hoursText };
         });
 
     // 保留原始物品列表（用于出售等操作）
@@ -562,8 +562,12 @@ async function getBagDetail(): Promise<any> {
         const mutantEffects = getMutantEffectsByIds(mutantTypes);
         const groupKey: string = `uid:${uid}`;
         const info: any = getItemById(id) || null;
-        let name: string = info && info.name ? String(info.name) : '';
-        const itemType: number = info ? (Number(info.type) || 0) : 0;
+        // 官方 ItemInfo 快照缺项（如红薯 307 系列）时用 ItemAlias.json 兜底，
+        // 否则会退化成「物品40307」并且分类落到「道具」。
+        const aliasName: string = getAliasName(id);
+        const aliasItemType: number = getAliasItemType(id);
+        let name: string = info && info.name ? String(info.name) : aliasName;
+        const itemType: number = (info ? (Number(info.type) || 0) : 0) || aliasItemType;
         let category: string = 'item';
         if (id === 1 || id === 1001) {
             name = '金币';
