@@ -1,5 +1,21 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
+
+/**
+ * 作物阶段贴图清单（gameConfig/plant_images/manifest.json）。
+ * 模块级共享，24 张卡片只拉一次；拿不到就退回种子图标。
+ * 放在前端解析而不是只依赖后端 plantImage，好处是新作物只要把
+ * Crop_<编号> 目录和 manifest 键补上就立刻生效，不用重启后端进程。
+ */
+let phaseManifestPromise: Promise<Record<string, Record<string, string>>> | null = null
+function loadPhaseManifest() {
+  if (!phaseManifestPromise) {
+    phaseManifestPromise = fetch('/game-config/plant_images/manifest.json')
+      .then(res => (res.ok ? res.json() : {}))
+      .catch(() => ({}))
+  }
+  return phaseManifestPromise
+}
 
 /**
  * 一块地的卡片。结构固定为：编号与土地类型 / 作物 / 名称 / 时间或主状态 / 进度 / 状态图标，
@@ -46,10 +62,29 @@ const soil = computed(() => SOILS[level.value]!)
 const status = computed(() => String(land.value.status || ''))
 const isLocked = computed(() => status.value === 'locked' || land.value.unlocked === false)
 const isEmpty = computed(() => !isLocked.value && (status.value === 'empty' || !String(land.value.plantName || '').trim()))
-// 作物图优先用官方生长阶段贴图（plantImage，来自 gameConfig/plant_images/Crop_*）。
-// 新作物（如 1020307 红薯）不在 Plant.json 里，后端算不出 seedId，seedImage 是空的，
-// 只有 plantImage 能出图；老作物两者都有时也优先展示成长阶段而不是种子图标。
-const cropImage = computed(() => String(land.value.plantImage || land.value.seedImage || '').trim())
+// 作物图优先用官方生长阶段贴图。顺序：后端 plantImage → 前端按 manifest 自算 → 种子图标。
+// 新作物（如 1020307 红薯）不在 Plant.json 里，后端算不出 seedId，seedImage 是空串，
+// 所以过去只能画通用小芽占位图。
+const phaseManifest = ref<Record<string, Record<string, string>>>({})
+onMounted(async () => { phaseManifest.value = await loadPhaseManifest() })
+
+const cropImage = computed(() => {
+  const fromServer = String(land.value.plantImage || '').trim()
+  if (fromServer) return fromServer
+  const plantId = Number(land.value.displayPlantId || land.value.plantId || 0) || 0
+  const phase = Math.min(Math.max(Number(land.value.imagePhase) || 1, 1), 6)
+  if (plantId >= 1020000) {
+    const entry = phaseManifest.value[`Crop_${plantId - 1020000}`]
+    const url = entry && (entry[String(phase)] || entry['6'])
+    if (url) return String(url)
+  }
+  return String(land.value.seedImage || '').trim()
+})
+
+// 贴图 404 时不要留破图，直接退回小芽占位图标。
+const imageBroken = ref(false)
+watch(cropImage, () => { imageBroken.value = false })
+const showCropImage = computed(() => !!cropImage.value && !imageBroken.value)
 const plantSize = computed(() => Math.max(1, Number(land.value.plantSize) || 1))
 // 合种副地：作物与状态都来自主地，只做弱化展示并指向主地。
 const isFollower = computed(() => !!land.value.occupiedByMaster && Number(land.value.masterLandId) > 0 && Number(land.value.masterLandId) !== Number(land.value.id))
@@ -249,7 +284,7 @@ const ariaLabel = computed(() => {
     <div class="plot__crop">
       <span v-if="isLocked" class="plot__placeholder i-carbon-locked" />
       <span v-else-if="isEmpty" class="plot__placeholder i-carbon-sprout" />
-      <img v-else-if="cropImage" :src="safeImage(cropImage)" alt="" loading="lazy" referrerpolicy="no-referrer">
+      <img v-else-if="showCropImage" :src="safeImage(cropImage)" alt="" loading="lazy" referrerpolicy="no-referrer" @error="imageBroken = true">
       <span v-else class="plot__placeholder i-carbon-sprout" />
     </div>
 
