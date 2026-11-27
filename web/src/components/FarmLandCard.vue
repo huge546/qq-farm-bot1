@@ -46,6 +46,10 @@ const soil = computed(() => SOILS[level.value]!)
 const status = computed(() => String(land.value.status || ''))
 const isLocked = computed(() => status.value === 'locked' || land.value.unlocked === false)
 const isEmpty = computed(() => !isLocked.value && (status.value === 'empty' || !String(land.value.plantName || '').trim()))
+// 作物图优先用官方生长阶段贴图（plantImage，来自 gameConfig/plant_images/Crop_*）。
+// 新作物（如 1020307 红薯）不在 Plant.json 里，后端算不出 seedId，seedImage 是空的，
+// 只有 plantImage 能出图；老作物两者都有时也优先展示成长阶段而不是种子图标。
+const cropImage = computed(() => String(land.value.plantImage || land.value.seedImage || '').trim())
 const plantSize = computed(() => Math.max(1, Number(land.value.plantSize) || 1))
 // 合种副地：作物与状态都来自主地，只做弱化展示并指向主地。
 const isFollower = computed(() => !!land.value.occupiedByMaster && Number(land.value.masterLandId) > 0 && Number(land.value.masterLandId) !== Number(land.value.id))
@@ -245,7 +249,7 @@ const ariaLabel = computed(() => {
     <div class="plot__crop">
       <span v-if="isLocked" class="plot__placeholder i-carbon-locked" />
       <span v-else-if="isEmpty" class="plot__placeholder i-carbon-sprout" />
-      <img v-else-if="land.seedImage" :src="safeImage(land.seedImage)" alt="" loading="lazy" referrerpolicy="no-referrer">
+      <img v-else-if="cropImage" :src="safeImage(cropImage)" alt="" loading="lazy" referrerpolicy="no-referrer">
       <span v-else class="plot__placeholder i-carbon-sprout" />
     </div>
 
